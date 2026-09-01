@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 8 deployment-fix verification. Verified GET /health app-level route returns 200 {status:ok} on localhost:8001 (the primary deploy blocker fix). Confirmed regression-safety of {_id:0} projections on /api/quotes (4 seeded quotes with all required fields + no _id leak), /api/dashboard/stats (correct aggregate response), and /api/catalog (12 items). POST /api/seed works in sandbox (ALLOW_DEMO_RESET=true). Regression spot-checks passed: PDF (application/pdf, %PDF header), send-email (mode returned), analyze (returns questions/lignes), transcribe (small wav 200 with text), public accept/refuse. 11/11 tests passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_deployment_fix.py",
+    "/app/test_reports/pytest/iter8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is ~1275 lines — should be split into routers/services modules for maintainability (quotes, catalog, public, email, pdf, ai).",
+    "ALLOW_DEMO_RESET gate correctly applied to /api/seed and /api/catalog/reset (403 when disabled). Verified sandbox has it=true.",
+    "Projections {_id:0} applied consistently on list endpoints; single-doc endpoints (get_quote, update paths) still rely on serialize_quote/pop _id — OK.",
+    "Public URL /health returns frontend index.html (200) due to ingress routing non-/api to frontend — expected per spec; deployment health probe should hit backend directly which succeeds."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter8_deployment_fix.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "None (no auth in this app).",
+  "seed_data_creation": "Called POST /api/seed to reseed the 4 demo quotes + 12 catalog items before regression tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 8 focused on deployment fix: /health app-level route exists and returns {status:ok} on localhost:8001. Ingress serves the React app for public non-/api paths, so REACT_APP_BACKEND_URL/health returns HTML — expected. Emergent Kubernetes health probe should target the backend service directly. All projected list endpoints verified to return complete fields and no _id leak. Regression suite lives at /app/backend/tests/test_iter8_deployment_fix.py and can be run as-is with REACT_APP_BACKEND_URL exported.",
+  "rca of the issue": "Deployment blocker was that Kubernetes health probe hit GET /health (no /api prefix) but FastAPI only mounted /api/* routes via APIRouter. Fix: added @app.get('/health') returning {'status':'ok'} at app level (server.py line 52-53). Verified: curl http://localhost:8001/health -> 200 {\"status\":\"ok\"}. Additionally, ALLOW_DEMO_RESET env gate hardens /api/seed and /api/catalog/reset for prod (403 when unset), and {_id:0} projections on list endpoints prevent accidental ObjectId serialization issues without altering response shape for the frontend."
+}

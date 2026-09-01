@@ -18,6 +18,11 @@ Application web responsive en français permettant à un artisan de transformer 
 - Prévisualisation devis pro (coordonnées, numéro, date, client, tableau, totaux, mentions légales).
 - Statuts Brouillon/Envoyé/À relancer/Accepté + actions Enregistrer/Envoyer/Marquer accepté/Relancer (message prérempli modifiable).
 
+## Correctif déploiement (2026-09-01) — Itération 8
+- ✅ Blocage résolu : sonde de santé Kubernetes `GET /health` (sans préfixe /api) renvoyait 404 → ajout de `@app.get("/health")` → `{"status":"ok"}` (200 vérifié).
+- ✅ Durcissement prod : `POST /api/seed` et `POST /api/catalog/reset` protégés par `ALLOW_DEMO_RESET` (403 si absent ; les données Atlas de prod ne sont jamais effacées). Seed de démarrage idempotent (insertion si vide) conservé.
+- ✅ Projections MongoDB ajoutées (get_catalog_items, list_quotes, dashboard_stats). Deployment agent : PASS. Tests backend 11/11.
+
 ## Implémenté (2026-09-01) — Itération 7
 - ✅ Reconnaissance vocale gérée par Emergent (OpenAI whisper-1) : endpoint POST /api/transcribe (audio → texte français). Le hook `useDictation` utilise l'API Web Speech du navigateur si disponible, sinon bascule automatiquement sur un enregistrement micro (MediaRecorder) transcrit côté serveur par Whisper. Garde 25 Mo max.
 - ✅ La dictée fonctionne donc aussi sur les navigateurs sans reconnaissance vocale intégrée. Tests 100% (backend 10/10, frontend), aucune régression.

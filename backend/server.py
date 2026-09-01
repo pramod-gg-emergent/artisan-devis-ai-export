@@ -40,12 +40,18 @@ EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 EMAIL_KEY = os.environ.get('EMERGENT_EMAIL_KEY')
 EMAIL_FROM_NAME = os.environ.get('EMAIL_FROM_NAME', 'SOCLE Artisan')
 EMAIL_REPLY_TO = os.environ.get('EMAIL_REPLY_TO')
+ALLOW_DEMO_RESET = os.environ.get('ALLOW_DEMO_RESET', 'false').lower() == 'true'
 
 app = FastAPI(title="SOCLE Artisan – Assistant Devis IA")
 api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 # Stored statuses. "a_relancer" is a *derived* state (échéance atteinte), not stored.
 STATUSES = ["brouillon", "envoye", "relance", "accepte", "refuse"]
@@ -249,10 +255,7 @@ async def get_company() -> dict:
 
 
 async def get_catalog_items() -> List[dict]:
-    items = await db.catalog.find({}).to_list(500)
-    for i in items:
-        i.pop("_id", None)
-    return items
+    return await db.catalog.find({}, {"_id": 0}).to_list(500)
 
 
 # ---------------------------------------------------------------------------
@@ -381,6 +384,8 @@ async def catalog_put(payload: CatalogUpdate):
 
 @api_router.post("/catalog/reset")
 async def catalog_reset():
+    if not ALLOW_DEMO_RESET:
+        raise HTTPException(status_code=403, detail="Réinitialisation du catalogue désactivée")
     await db.catalog.delete_many({})
     await seed_catalog()
     return {"items": await get_catalog_items()}
@@ -400,7 +405,7 @@ async def analyze(req: AnalyzeRequest):
 
 @api_router.get("/quotes")
 async def list_quotes(statut: Optional[str] = None):
-    docs = await db.quotes.find({}).sort("created_at", -1).to_list(500)
+    docs = await db.quotes.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     result = [serialize_quote(d) for d in docs]
     if statut:
         result = [q for q in result if q["effective_statut"] == statut]
@@ -517,7 +522,9 @@ async def mark_relance(quote_id: str):
 
 @api_router.get("/dashboard/stats")
 async def dashboard_stats():
-    docs = await db.quotes.find({}).to_list(1000)
+    docs = await db.quotes.find(
+        {}, {"_id": 0, "statut": 1, "lignes": 1, "time_saved_min": 1, "next_relance_at": 1}
+    ).to_list(1000)
     stats = {
         "a_preparer": 0, "envoyes": 0, "a_relancer": 0, "relances": 0, "acceptes": 0, "refuses": 0,
         "ca_potentiel": 0.0, "ca_accepte": 0.0, "relance_total": 0.0,
@@ -643,6 +650,8 @@ async def seed_quotes():
 
 @api_router.post("/seed")
 async def force_seed():
+    if not ALLOW_DEMO_RESET:
+        raise HTTPException(status_code=403, detail="Réinitialisation des données désactivée")
     await db.quotes.delete_many({})
     await db.catalog.delete_many({})
     await db.settings.delete_many({"key": "company"})
