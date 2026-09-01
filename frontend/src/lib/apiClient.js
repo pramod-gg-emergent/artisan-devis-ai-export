@@ -23,6 +23,13 @@ export const api = {
     client.post(`/quotes/${id}/status`, { statut, ...extra }).then((r) => r.data),
   relanceMessage: (id) => client.post(`/quotes/${id}/relance`).then((r) => r.data),
   markRelance: (id) => client.post(`/quotes/${id}/mark-relance`).then((r) => r.data),
+  pdfUrl: (id) => `${API}/quotes/${id}/pdf`,
+  emailPreview: (id) => client.get(`/quotes/${id}/email-preview`).then((r) => r.data),
+  sendEmail: (id, payload) => client.post(`/quotes/${id}/send-email`, payload).then((r) => r.data),
+  publicQuote: (token) => client.get(`/public/quotes/${token}`).then((r) => r.data),
+  publicAccept: (token) => client.post(`/public/quotes/${token}/accept`).then((r) => r.data),
+  publicRefuse: (token, comment) =>
+    client.post(`/public/quotes/${token}/refuse`, { comment }).then((r) => r.data),
 };
 
 export default api;

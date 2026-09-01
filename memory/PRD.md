@@ -18,6 +18,14 @@ Application web responsive en français permettant à un artisan de transformer 
 - Prévisualisation devis pro (coordonnées, numéro, date, client, tableau, totaux, mentions légales).
 - Statuts Brouillon/Envoyé/À relancer/Accepté + actions Enregistrer/Envoyer/Marquer accepté/Relancer (message prérempli modifiable).
 
+## Implémenté (2026-09-01) — Itération 3
+- ✅ PDF professionnel (reportlab) : bouton « Télécharger le PDF », rendu imprimable (entreprise, client, N°/date, lignes, qté, prix, TVA, totaux, mentions légales, statut) aux couleurs pétrole/lagon. Endpoint GET /api/quotes/{id}/pdf.
+- ✅ Envoi email réel (Resend managé Emergent) avec PDF joint : prévisualisation (destinataire + objet en lecture seule, message modifiable), délai de relance (J+5/7/10) ; mode démonstration si non configuré. Respect des guardrails (recipient/objet/HTML côté serveur, message échappé).
+- ✅ Lien client unique par devis envoyé + page publique mobile `/devis-client/:token` : Accepter / Refuser avec confirmation, page de confirmation, mise à jour auto du statut ; acceptation horodatée, refus avec commentaire facultatif.
+- ✅ Workflow : acceptation/refus client -> statut Accepté/Refusé + arrêt des relances ; actions manuelles conservées.
+- ✅ Corrections IA : surface murale jamais déduite de la hauteur seule (demande surface murs OU périmètre+hauteur) ; TVA non présélectionnée à 10% sans contexte (« À définir » ou question).
+- ✅ Tests : 100% backend (30/30) et frontend end-to-end.
+
 ## Implémenté (2026-09-01) — Itération 2
 - ✅ Bouton « Modifier le devis » (brouillon → édition) / « Modifier et renvoyer » (envoyé) via `/nouveau?edit=<id>` (PUT + renvoi).
 - ✅ IA en 2 temps : questions de clarification si données manquantes (surface murs ≠ sol), puis génération avec les réponses.

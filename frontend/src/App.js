@@ -8,20 +8,30 @@ import QuotesList from "@/pages/QuotesList";
 import NewQuote from "@/pages/NewQuote";
 import QuoteDetail from "@/pages/QuoteDetail";
 import Settings from "@/pages/Settings";
+import PublicQuote from "@/pages/PublicQuote";
+
+function AppShell() {
+  return (
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/devis" element={<QuotesList />} />
+        <Route path="/nouveau" element={<NewQuote />} />
+        <Route path="/devis/:id" element={<QuoteDetail />} />
+        <Route path="/parametres" element={<Settings />} />
+      </Routes>
+    </Layout>
+  );
+}
 
 function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/devis" element={<QuotesList />} />
-            <Route path="/nouveau" element={<NewQuote />} />
-            <Route path="/devis/:id" element={<QuoteDetail />} />
-            <Route path="/parametres" element={<Settings />} />
-          </Routes>
-        </Layout>
+        <Routes>
+          <Route path="/devis-client/:token" element={<PublicQuote />} />
+          <Route path="/*" element={<AppShell />} />
+        </Routes>
       </BrowserRouter>
       <Toaster position="top-center" richColors />
     </div>

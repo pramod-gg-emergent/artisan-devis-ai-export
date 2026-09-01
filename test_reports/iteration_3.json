@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 3 fully tested. Backend: 30/30 pytest pass (19 regression from iter2 + 11 new). New coverage: GET /quotes/{id}/pdf returns valid application/pdf (%PDF magic, >2KB); GET /quotes/{id}/email-preview returns {to, subject 'Devis {num} — {company}', default_message starting 'Bonjour ...', has_email, email_configured}; POST /quotes/{id}/send-email against delivered@resend.dev returns mode='live', sent=true, attached_pdf=true, public_link '.../devis-client/<token>' and transitions quote to statut=envoye with sent_at, next_relance_at and public_token persisted; send-email 400s when the client has no email; GET /public/quotes/{token} returns {quote, company (public fields only, no relance_delay_days/is_demo)} and 404 on bad token; POST /public/quotes/{token}/accept sets statut=accepte + accepted_at + next_relance_at=null + decision_source=client (artisan GET reflects it); POST /public/quotes/{token}/refuse with comment persists refus_comment (verified stored on the quote) and next_relance_at=null. AI wall-surface fix: analyze on 'peindre les murs du salon, hauteur sous plafond 2,5 m' returns status=questions asking for surface/périmètre/dimensions (does NOT compute walls from height alone). AI TVA fix: description without fiscal context does not silently default all lines to TVA 10 (either asks or returns mixed/null TVA).\n\nFrontend (Playwright, 390x844 mobile viewport):\n- QuoteDetail (DEV-2026-004 brouillon): download-pdf-button href points to /api/quotes/{id}/pdf; clicking 'Envoyer au client' opens email-modal with prefilled read-only email-to (garcia.j@email.fr), email-subject ('Devis DEV-2026-004 — Martin Rénovation'), editable email-message ('Bonjour M. Garcia, Veuillez trouver ci-joint ...'), delay chips delay-5/7/10. Confirm-email-btn closes modal, quote becomes envoyé, and client-link-box + client-link-input + copy-link-btn appear.\n- No-email fallback: brouillon quote with empty client.email opens send-modal (not email-modal) with mark-delay-5/7/10 chips + confirm-send-btn; confirming marks it envoye and client-link-box appears (server issues public_token on send).\n- Public /devis-client/{token}: renders the devis; 'Refuser le devis' opens public-confirm-modal exposing public-refuse-comment textarea, public-confirm-decision persists comment and shows public-confirmation banner ('Vous avez refusé ce devis'); 'Accepter le devis' opens the same modal WITHOUT the refuse-comment textarea, public-confirm-decision shows the accepted banner. Artisan-side QuoteDetail then displays 'Devis accepté par le client le <date>' (decision_source=client).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Dialogs (email-modal, send-modal, relance-modal, public-confirm-modal)",
+        "issues": [
+          "Radix DialogContent emits a console warning: 'Missing `Description` or `aria-describedby={undefined}` for {DialogContent}'. Purely an a11y warning, non-blocking. Add a <DialogDescription> (or aria-describedby) to silence it."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_iter3.py",
+    "/app/test_reports/pytest/iter3_results.xml"
+  ],
+  "action_items": [
+    "(Optional a11y) Add DialogDescription to each shadcn Dialog to remove the 'Missing Description/aria-describedby' console warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1099 lines. It stayed manageable but is well past the 700-line split threshold — recommend routers/pdf.py, routers/email.py, routers/public.py, routers/quotes.py before the next iteration.",
+    "send_email guardrails are enforced in _assert_safe_email (G2 no forms/credential-asks; G3 https-only, no shorteners/IPs, anchor-text ≠ real host) and send_quote_email server-templates the subject and HTML so callers cannot supply the recipient/subject/HTML — matches the playbook's caller-limits contract.",
+    "public_accept/public_refuse correctly no-op if the quote is already accepte/refuse (idempotent for repeated client clicks). Good.",
+    "send_quote_email falls back to mode='demo' on send failure but still transitions the quote to envoye — this is correct for the requested demo mode, but the failure is only logged. Consider surfacing an internal alert when EMAIL_KEY is set but Resend errors happen.",
+    "safe_base_url refuses non-https base URLs so public_link is null on http — meaning the email button would be missing. Not currently a problem (preview URL is https) but worth documenting for local dev.",
+    "fnum() replaces '.' by ',' via 'replace(\",\", \" \")' after formatting — works because f\"{f:,.2f}\" uses ',' as thousand sep; correct but fragile if locale ever changes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter3.py"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "No auth. EMERGENT_EMAIL_KEY set; real-send test used to=delivered@resend.dev (Resend sink).",
+  "seed_data_creation": "POST /api/seed called before backend tests (module-scoped) and reseeded after each frontend flow. Ephemeral TEST_ quotes were created via /api/quotes for send/public flows. Final state: reseeded to the standard 4 demo quotes.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter3 tests live at /app/backend/tests/test_iter3.py (11 tests, ~5s). Combined with backend_test.py = 30 tests / ~7s. Real-email test hits delivered@resend.dev — safe to run repeatedly (Resend sink). Frontend flows tested at mobile 390x844: QuoteDetail send-email modal, no-email fallback send-modal, PublicQuote accept/refuse with comment persistence, and artisan-side status update after client decision. Radix Dialog missing-aria-description warnings are cosmetic and can be silenced by adding <DialogDescription> (optional).",
+  "rca of the issue": "N/A - no failures."
+}
