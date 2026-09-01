@@ -1,5 +1,5 @@
 import React from "react";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, AlertTriangle, Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { euro, num, lineHt, computeTotals } from "@/lib/format";
 
@@ -13,85 +13,112 @@ export const LineEditor = ({ lignes, setLignes }) => {
   const add = () =>
     setLignes([
       ...lignes,
-      { id: crypto.randomUUID(), designation: "", quantite: 1, unite: "u", prix_unitaire_ht: 0, tva: 20 },
+      { id: crypto.randomUUID(), designation: "", quantite: 1, unite: "u",
+        prix_unitaire_ht: 0, tva: 10, source: "manuel", catalog_code: null },
     ]);
 
   const totaux = computeTotals(lignes);
 
   return (
     <div className="space-y-3" data-testid="line-editor">
-      {lignes.map((l, i) => (
-        <div
-          key={l.id}
-          data-testid={`line-item-${i}`}
-          className="rounded-2xl border border-petrol/10 bg-card p-3 shadow-card"
-        >
-          <div className="flex items-start gap-2">
-            <Input
-              data-testid={`line-designation-${i}`}
-              value={l.designation}
-              onChange={(e) => update(l.id, "designation", e.target.value)}
-              placeholder="Désignation de la prestation"
-              className="h-11 flex-1 font-medium"
-            />
-            <button
-              data-testid={`line-delete-${i}`}
-              onClick={() => remove(l.id)}
-              className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-destructive"
-            >
-              <Trash2 size={17} />
-            </button>
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-            <div>
-              <label className="text-[10px] font-semibold uppercase text-muted-foreground">Qté</label>
+      {lignes.map((l, i) => {
+        const estimation = l.source === "estimation";
+        return (
+          <div
+            key={l.id}
+            data-testid={`line-item-${i}`}
+            className={`rounded-2xl border bg-card p-3 shadow-card ${
+              estimation ? "border-amber-relance/40" : "border-petrol/10"
+            }`}
+          >
+            <div className="flex items-start gap-2">
               <Input
-                data-testid={`line-quantite-${i}`}
-                type="number" step="any" value={l.quantite}
-                onChange={(e) => update(l.id, "quantite", parseFloat(e.target.value) || 0)}
-                className="h-10"
+                data-testid={`line-designation-${i}`}
+                value={l.designation}
+                onChange={(e) => update(l.id, "designation", e.target.value)}
+                placeholder="Désignation de la prestation"
+                className="h-11 flex-1 font-medium"
               />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold uppercase text-muted-foreground">Unité</label>
-              <select
-                data-testid={`line-unite-${i}`}
-                value={l.unite}
-                onChange={(e) => update(l.id, "unite", e.target.value)}
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+              <button
+                data-testid={`line-delete-${i}`}
+                onClick={() => remove(l.id)}
+                className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-destructive"
               >
-                {UNITES.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
+                <Trash2 size={17} />
+              </button>
             </div>
-            <div>
-              <label className="text-[10px] font-semibold uppercase text-muted-foreground">P.U. HT</label>
-              <Input
-                data-testid={`line-pu-${i}`}
-                type="number" step="any" value={l.prix_unitaire_ht}
-                onChange={(e) => update(l.id, "prix_unitaire_ht", parseFloat(e.target.value) || 0)}
-                className="h-10"
-              />
+
+            {/* source badge */}
+            <div className="mt-1.5">
+              {estimation ? (
+                <span data-testid={`line-source-${i}`} className="inline-flex items-center gap-1 rounded-full bg-amber-bg px-2 py-0.5 text-[11px] font-semibold text-amber-relance">
+                  <AlertTriangle size={11} /> Estimation à vérifier
+                </span>
+              ) : l.source === "catalogue" ? (
+                <span data-testid={`line-source-${i}`} className="inline-flex items-center gap-1 rounded-full bg-lagoon-light px-2 py-0.5 text-[11px] font-semibold text-lagoon-glow">
+                  <Tag size={11} /> Catalogue {l.catalog_code ? `· ${l.catalog_code}` : ""}
+                </span>
+              ) : (
+                <span data-testid={`line-source-${i}`} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                  Saisie manuelle
+                </span>
+              )}
             </div>
-            <div>
-              <label className="text-[10px] font-semibold uppercase text-muted-foreground">TVA</label>
-              <select
-                data-testid={`line-tva-${i}`}
-                value={l.tva}
-                onChange={(e) => update(l.id, "tva", parseFloat(e.target.value))}
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-              >
-                {TVA_RATES.map((t) => <option key={t} value={t}>{num(t)} %</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col justify-end">
-              <label className="text-[10px] font-semibold uppercase text-muted-foreground">Total HT</label>
-              <div data-testid={`line-total-${i}`} className="flex h-10 items-center font-heading font-bold text-petrol">
-                {euro(lineHt(l))}
+
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <div>
+                <label className="text-[10px] font-semibold uppercase text-muted-foreground">Qté</label>
+                <Input
+                  data-testid={`line-quantite-${i}`}
+                  type="number" step="any" value={l.quantite}
+                  onChange={(e) => update(l.id, "quantite", parseFloat(e.target.value) || 0)}
+                  className="h-10"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold uppercase text-muted-foreground">Unité</label>
+                <select
+                  data-testid={`line-unite-${i}`}
+                  value={l.unite}
+                  onChange={(e) => update(l.id, "unite", e.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  {UNITES.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold uppercase text-muted-foreground">P.U. HT</label>
+                <Input
+                  data-testid={`line-pu-${i}`}
+                  type="number" step="any" value={l.prix_unitaire_ht}
+                  onChange={(e) => update(l.id, "prix_unitaire_ht", parseFloat(e.target.value) || 0)}
+                  className={`h-10 ${estimation && !l.prix_unitaire_ht ? "border-amber-relance/60" : ""}`}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold uppercase text-muted-foreground">TVA</label>
+                <select
+                  data-testid={`line-tva-${i}`}
+                  value={l.tva == null ? "" : String(l.tva)}
+                  onChange={(e) => update(l.id, "tva", e.target.value === "" ? null : parseFloat(e.target.value))}
+                  className={`h-10 w-full rounded-md border bg-background px-2 text-sm ${
+                    l.tva == null ? "border-amber-relance/60 text-amber-relance" : "border-input"
+                  }`}
+                >
+                  <option value="">À définir</option>
+                  {TVA_RATES.map((t) => <option key={t} value={String(t)}>{num(t)} %</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col justify-end">
+                <label className="text-[10px] font-semibold uppercase text-muted-foreground">Total HT</label>
+                <div data-testid={`line-total-${i}`} className="flex h-10 items-center font-heading font-bold text-petrol">
+                  {euro(lineHt(l))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <button
         data-testid="add-line-button"

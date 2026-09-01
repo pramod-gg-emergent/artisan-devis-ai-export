@@ -18,7 +18,18 @@ Application web responsive en français permettant à un artisan de transformer 
 - Prévisualisation devis pro (coordonnées, numéro, date, client, tableau, totaux, mentions légales).
 - Statuts Brouillon/Envoyé/À relancer/Accepté + actions Enregistrer/Envoyer/Marquer accepté/Relancer (message prérempli modifiable).
 
-## Implémenté (2026-09-01)
+## Implémenté (2026-09-01) — Itération 2
+- ✅ Bouton « Modifier le devis » (brouillon → édition) / « Modifier et renvoyer » (envoyé) via `/nouveau?edit=<id>` (PUT + renvoi).
+- ✅ IA en 2 temps : questions de clarification si données manquantes (surface murs ≠ sol), puis génération avec les réponses.
+- ✅ Catalogue tarifaire de démonstration éditable (page Paramètres) ; lignes taguées source=catalogue/estimation ; l'IA n'invente plus de prix.
+- ✅ TVA modifiable par ligne avec option « À définir » (null, non comptée tant que non fixée).
+- ✅ Infos entreprise configurables (raison sociale, adresse, tel, email, SIRET, TVA, assurance, délai relance) ; Martin Rénovation = démo (is_demo).
+- ✅ Workflow statuts corrigé : Brouillon → Envoyé → À relancer (dérivé, échéance) → Relancé → Accepté/Refusé. Relance → statut « Relancé » + date + compteur.
+- ✅ Message de relance : nom complet + montant format FR (1 093,40 €), modifiable.
+- ✅ Date de prochaine relance configurable (J+5/J+7/J+10) à l'envoi ; devis échus dans « À traiter aujourd'hui ».
+- ✅ Tests : 100% backend (19/19) et frontend end-to-end.
+
+## Implémenté (2026-09-01) — Itération 1
 - ✅ Dashboard, liste devis filtrable, wizard 3 étapes, éditeur de lignes réactif, prévisualisation, transitions de statut, modal de relance.
 - ✅ Analyse IA réelle (gpt-5.4) → 8 lignes réalistes sur l'exemple Mme Dubois.
 - ✅ 4 devis de démo préchargés (Martin Rénovation), auto-seed au démarrage; POST /api/seed pour réinitialiser.

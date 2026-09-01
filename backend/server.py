@@ -7,11 +7,10 @@ import re
 import json
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
-from typing import List, Optional, Annotated, Any
-from bson import ObjectId
+from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional, Any
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
@@ -30,10 +29,11 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Company profile (the artisan using the app). Static for the MVP.
-# ---------------------------------------------------------------------------
-COMPANY = {
+# Stored statuses. "a_relancer" is a *derived* state (échéance atteinte), not stored.
+STATUSES = ["brouillon", "envoye", "relance", "accepte", "refuse"]
+
+DEFAULT_COMPANY = {
+    "key": "company",
     "name": "Martin Rénovation",
     "artisan_name": "Martin Dubois",
     "siret": "849 204 112 00018",
@@ -42,25 +42,53 @@ COMPANY = {
     "email": "contact@martin-renovation.fr",
     "assurance": "MAAF Décennale N° 98234102-B",
     "tva_intra": "FR 76 849204112",
+    "relance_delay_days": 7,
+    "is_demo": True,
 }
 
-STATUSES = ["brouillon", "envoye", "a_relancer", "accepte"]
+DEMO_CATALOG = [
+    {"code": "PROT-01", "designation": "Protection du sol et du mobilier", "unite": "forfait", "prix_unitaire_ht": 85, "tva": 10, "category": "Préparation"},
+    {"code": "PREP-01", "designation": "Préparation des supports (ponçage, lessivage)", "unite": "m²", "prix_unitaire_ht": 6.5, "tva": 10, "category": "Préparation"},
+    {"code": "FISS-01", "designation": "Rebouchage et traitement de fissure", "unite": "u", "prix_unitaire_ht": 18, "tva": 10, "category": "Préparation"},
+    {"code": "PEINT-01", "designation": "Peinture murs 2 couches (acrylique)", "unite": "m²", "prix_unitaire_ht": 12.5, "tva": 10, "category": "Peinture"},
+    {"code": "PEINT-02", "designation": "Peinture plafond 2 couches", "unite": "m²", "prix_unitaire_ht": 14, "tva": 10, "category": "Peinture"},
+    {"code": "PLINT-01", "designation": "Fourniture et pose de plinthes", "unite": "ml", "prix_unitaire_ht": 14, "tva": 10, "category": "Menuiserie"},
+    {"code": "PLINT-02", "designation": "Dépose de plinthes existantes", "unite": "ml", "prix_unitaire_ht": 4.5, "tva": 10, "category": "Menuiserie"},
+    {"code": "DEPOSE-01", "designation": "Dépose et évacuation ancien revêtement", "unite": "m²", "prix_unitaire_ht": 22, "tva": 10, "category": "Démolition"},
+    {"code": "CARR-01", "designation": "Pose faïence murale", "unite": "m²", "prix_unitaire_ht": 55, "tva": 10, "category": "Carrelage"},
+    {"code": "CARR-02", "designation": "Pose carrelage au sol", "unite": "m²", "prix_unitaire_ht": 60, "tva": 10, "category": "Carrelage"},
+    {"code": "PARQ-01", "designation": "Fourniture et pose parquet flottant", "unite": "m²", "prix_unitaire_ht": 56, "tva": 10, "category": "Sol"},
+    {"code": "MO-01", "designation": "Main d'œuvre (taux horaire)", "unite": "h", "prix_unitaire_ht": 45, "tva": 10, "category": "Main d'œuvre"},
+]
 
 
 # ---------------------------------------------------------------------------
-# Mongo helpers
+# Helpers
 # ---------------------------------------------------------------------------
-def _validate_object_id(v: Any) -> str:
-    if isinstance(v, ObjectId):
-        return str(v)
-    return str(v)
-
-
-PyObjectId = Annotated[str, BeforeValidator(_validate_object_id)]
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return now_utc().isoformat()
+
+
+def parse_iso(s: Optional[str]) -> Optional[datetime]:
+    if not s:
+        return None
+    try:
+        d = datetime.fromisoformat(s)
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return d
+    except Exception:
+        return None
+
+
+def fmt_eur(v: float) -> str:
+    s = f"{float(v or 0):,.2f}"
+    s = s.replace(",", "\u00a0").replace(".", ",")
+    return f"{s}\u00a0€"
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +107,9 @@ class QuoteLine(BaseModel):
     quantite: float = 1
     unite: str = "u"
     prix_unitaire_ht: float = 0
-    tva: float = 20.0
+    tva: Optional[float] = None
+    source: str = "manuel"  # catalogue | estimation | manuel
+    catalog_code: Optional[str] = None
 
 
 class Quote(BaseModel):
@@ -95,8 +125,12 @@ class Quote(BaseModel):
     updated_at: str = Field(default_factory=now_iso)
     sent_at: Optional[str] = None
     accepted_at: Optional[str] = None
+    refused_at: Optional[str] = None
+    last_relance_at: Optional[str] = None
+    next_relance_at: Optional[str] = None
     relance_count: int = 0
-    time_saved_min: int = 25  # estimated minutes saved thanks to AI
+    relance_delay_days: int = 7
+    time_saved_min: int = 25
 
 
 class QuoteUpsert(BaseModel):
@@ -105,86 +139,177 @@ class QuoteUpsert(BaseModel):
     lignes: List[QuoteLine] = Field(default_factory=list)
 
 
+class StatusUpdate(BaseModel):
+    statut: str
+    relance_delay_days: Optional[int] = None
+
+
 class AnalyzeRequest(BaseModel):
     description: str
+    answers: Optional[str] = None
+
+
+class CompanyUpdate(BaseModel):
+    name: str
+    artisan_name: str = ""
+    address: str = ""
+    phone: str = ""
+    email: str = ""
+    siret: str = ""
+    tva_intra: str = ""
+    assurance: str = ""
+    relance_delay_days: int = 7
+
+
+class CatalogItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    code: str = ""
+    designation: str
+    unite: str = "u"
+    prix_unitaire_ht: float = 0
+    tva: float = 10
+    category: str = ""
+
+
+class CatalogUpdate(BaseModel):
+    items: List[CatalogItem]
 
 
 # ---------------------------------------------------------------------------
-# Totals
+# Totals & serialization
 # ---------------------------------------------------------------------------
 def compute_totals(lignes: List[dict]) -> dict:
     total_ht = 0.0
     total_tva = 0.0
     for l in lignes:
-        line_ht = float(l.get("quantite", 0)) * float(l.get("prix_unitaire_ht", 0))
+        line_ht = float(l.get("quantite", 0) or 0) * float(l.get("prix_unitaire_ht", 0) or 0)
         total_ht += line_ht
-        total_tva += line_ht * float(l.get("tva", 0)) / 100.0
+        total_tva += line_ht * float(l.get("tva") or 0) / 100.0
     total_ht = round(total_ht, 2)
     total_tva = round(total_tva, 2)
-    return {
-        "total_ht": total_ht,
-        "total_tva": total_tva,
-        "total_ttc": round(total_ht + total_tva, 2),
-    }
+    return {"total_ht": total_ht, "total_tva": total_tva, "total_ttc": round(total_ht + total_tva, 2)}
+
+
+def effective_status(doc: dict) -> str:
+    s = doc.get("statut")
+    if s in ("envoye", "relance"):
+        nr = parse_iso(doc.get("next_relance_at"))
+        if nr and nr <= now_utc():
+            return "a_relancer"
+    return s
 
 
 def serialize_quote(doc: dict) -> dict:
     doc.pop("_id", None)
     doc["totaux"] = compute_totals(doc.get("lignes", []))
+    doc["effective_statut"] = effective_status(doc)
     return doc
 
 
 async def next_numero() -> str:
-    year = datetime.now(timezone.utc).year
+    year = now_utc().year
     count = await db.quotes.count_documents({})
     return f"DEV-{year}-{count + 1:03d}"
 
 
-# ---------------------------------------------------------------------------
-# AI analysis
-# ---------------------------------------------------------------------------
-AI_SYSTEM = (
-    "Tu es un assistant expert en chiffrage pour artisans du bâtiment en France. "
-    "À partir d'une description de chantier en français, tu produis les lignes d'un devis. "
-    "Tu réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, au format:\n"
-    '{"lignes": [{"designation": str, "quantite": number, "unite": str, '
-    '"prix_unitaire_ht": number, "tva": number}]}\n'
-    "Règles: unite ∈ [m², ml, m³, u, h, forfait, ens.]. "
-    "tva ∈ [5.5, 10, 20] (10 pour rénovation de logement ancien par défaut). "
-    "Utilise des prix unitaires HT réalistes du marché français. "
-    "Décompose le chantier en prestations distinctes (préparation, fournitures, main d'œuvre) "
-    "avec des désignations claires et professionnelles."
-)
+async def get_company() -> dict:
+    doc = await db.settings.find_one({"key": "company"})
+    if not doc:
+        await db.settings.insert_one(dict(DEFAULT_COMPANY))
+        doc = dict(DEFAULT_COMPANY)
+    doc.pop("_id", None)
+    return doc
 
 
-async def analyze_description(description: str) -> List[dict]:
+async def get_catalog_items() -> List[dict]:
+    items = await db.catalog.find({}).to_list(500)
+    for i in items:
+        i.pop("_id", None)
+    return items
+
+
+# ---------------------------------------------------------------------------
+# AI analysis (two-phase: clarifying questions -> priced lines from catalog)
+# ---------------------------------------------------------------------------
+def build_ai_system(catalog: List[dict]) -> str:
+    cat_lines = "\n".join(
+        f"- [{c.get('code','')}] {c['designation']} | {c.get('unite','u')} | "
+        f"{c.get('prix_unitaire_ht',0)} €/HT | TVA {c.get('tva',10)}%"
+        for c in catalog
+    )
+    return (
+        "Tu es un assistant de chiffrage pour artisans du bâtiment en France.\n"
+        "RÈGLES ABSOLUES:\n"
+        "1. Ne JAMAIS inventer une donnée métier manquante (surface de murs, hauteur sous plafond, "
+        "nombre d'éléments, quantité). La surface AU SOL d'une pièce n'est PAS la surface des murs à peindre.\n"
+        "2. Si la description ne permet pas de calculer de façon fiable une quantité ou une surface, "
+        "tu poses d'abord 2 à 4 questions complémentaires courtes et précises, et tu NE génères PAS de lignes.\n"
+        "3. Pour les prix, utilise EXCLUSIVEMENT le catalogue tarifaire ci-dessous. "
+        "Si une prestation correspond à une entrée du catalogue: source='catalogue', reprends son code, "
+        "son prix_unitaire_ht et sa tva. Si aucune entrée ne correspond: source='estimation', "
+        "prix_unitaire_ht=0 et tva=null (l'artisan complétera). Ne présente jamais un prix inventé comme certain.\n"
+        "4. N'applique pas un taux de TVA au hasard: la TVA provient du catalogue; laisse null si incertaine.\n\n"
+        f"CATALOGUE TARIFAIRE (démonstration):\n{cat_lines}\n\n"
+        "Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour.\n"
+        'Si informations manquantes: {"status":"questions","questions":["...","..."]}\n'
+        'Sinon: {"status":"lignes","note":"hypothèses éventuelles","lignes":[{"designation":str,'
+        '"quantite":number,"unite":str,"prix_unitaire_ht":number,"tva":number|null,'
+        '"source":"catalogue"|"estimation","catalog_code":str|null}]}'
+    )
+
+
+def _extract_json(text: str) -> dict:
+    text = text if isinstance(text, str) else str(text)
+    text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if m:
+        text = m.group(0)
+    return json.loads(text)
+
+
+async def analyze_description(description: str, answers: Optional[str], catalog: List[dict]) -> dict:
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
         session_id=f"devis-{uuid.uuid4()}",
-        system_message=AI_SYSTEM,
+        system_message=build_ai_system(catalog),
     ).with_model("openai", "gpt-5.4")
 
-    msg = UserMessage(text=f"Description du chantier:\n{description}\n\nGénère les lignes du devis en JSON.")
-    resp = await chat.send_message(msg)
+    if answers:
+        prompt = (
+            f"Description du chantier:\n{description}\n\n"
+            f"Réponses de l'artisan aux questions:\n{answers}\n\n"
+            "Génère maintenant les lignes du devis (status=lignes) en tenant compte de ces réponses. "
+            "Ne repose pas de questions."
+        )
+    else:
+        prompt = (
+            f"Description du chantier:\n{description}\n\n"
+            "Analyse la description. Si des données manquent pour chiffrer correctement, pose des questions "
+            "(status=questions). Sinon génère les lignes (status=lignes)."
+        )
 
-    text = resp if isinstance(resp, str) else str(resp)
-    # strip markdown fences if any
-    text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        text = match.group(0)
-    data = json.loads(text)
-    lignes = data.get("lignes", [])
-    out = []
-    for l in lignes:
-        out.append(QuoteLine(
+    resp = await chat.send_message(UserMessage(text=prompt))
+    data = _extract_json(resp)
+
+    if data.get("status") == "questions" and not answers:
+        qs = [str(q) for q in data.get("questions", []) if str(q).strip()]
+        if qs:
+            return {"status": "questions", "questions": qs}
+
+    lignes_raw = data.get("lignes", [])
+    lignes = []
+    for l in lignes_raw:
+        tva = l.get("tva", None)
+        lignes.append(QuoteLine(
             designation=str(l.get("designation", "Prestation")),
             quantite=float(l.get("quantite", 1) or 1),
             unite=str(l.get("unite", "u")),
             prix_unitaire_ht=float(l.get("prix_unitaire_ht", 0) or 0),
-            tva=float(l.get("tva", 20) or 20),
+            tva=(None if tva in (None, "", "null") else float(tva)),
+            source=str(l.get("source", "estimation")),
+            catalog_code=l.get("catalog_code") or None,
         ).model_dump())
-    return out
+    return {"status": "lignes", "note": data.get("note", ""), "lignes": lignes, "totaux": compute_totals(lignes)}
 
 
 # ---------------------------------------------------------------------------
@@ -196,27 +321,60 @@ async def root():
 
 
 @api_router.get("/company")
-async def get_company():
-    return COMPANY
+async def company_get():
+    return await get_company()
+
+
+@api_router.put("/company")
+async def company_put(payload: CompanyUpdate):
+    data = payload.model_dump()
+    data["is_demo"] = False
+    await db.settings.update_one({"key": "company"}, {"$set": data}, upsert=True)
+    return await get_company()
+
+
+@api_router.get("/catalog")
+async def catalog_get():
+    items = await get_catalog_items()
+    company = await get_company()
+    return {"items": items, "is_demo": company.get("is_demo", True)}
+
+
+@api_router.put("/catalog")
+async def catalog_put(payload: CatalogUpdate):
+    await db.catalog.delete_many({})
+    docs = [i.model_dump() for i in payload.items]
+    if docs:
+        await db.catalog.insert_many(docs)
+    return {"items": await get_catalog_items()}
+
+
+@api_router.post("/catalog/reset")
+async def catalog_reset():
+    await db.catalog.delete_many({})
+    await seed_catalog()
+    return {"items": await get_catalog_items()}
 
 
 @api_router.post("/analyze")
 async def analyze(req: AnalyzeRequest):
     if not req.description.strip():
         raise HTTPException(status_code=400, detail="Description vide")
+    catalog = await get_catalog_items()
     try:
-        lignes = await analyze_description(req.description)
+        return await analyze_description(req.description, req.answers, catalog)
     except Exception as e:
         logger.exception("AI analyze failed")
         raise HTTPException(status_code=500, detail=f"Analyse IA impossible: {e}")
-    return {"lignes": lignes, "totaux": compute_totals(lignes)}
 
 
 @api_router.get("/quotes")
 async def list_quotes(statut: Optional[str] = None):
-    query = {"statut": statut} if statut else {}
-    docs = await db.quotes.find(query).sort("created_at", -1).to_list(500)
-    return [serialize_quote(d) for d in docs]
+    docs = await db.quotes.find({}).sort("created_at", -1).to_list(500)
+    result = [serialize_quote(d) for d in docs]
+    if statut:
+        result = [q for q in result if q["effective_statut"] == statut]
+    return result
 
 
 @api_router.get("/quotes/{quote_id}")
@@ -229,12 +387,13 @@ async def get_quote(quote_id: str):
 
 @api_router.post("/quotes")
 async def create_quote(payload: QuoteUpsert):
-    numero = await next_numero()
+    company = await get_company()
     quote = Quote(
-        numero=numero,
+        numero=await next_numero(),
         client=payload.client,
         description=payload.description,
         lignes=payload.lignes,
+        relance_delay_days=company.get("relance_delay_days", 7),
     )
     doc = quote.model_dump()
     await db.quotes.insert_one(doc)
@@ -258,38 +417,46 @@ async def update_quote(quote_id: str, payload: QuoteUpsert):
 
 
 @api_router.post("/quotes/{quote_id}/status")
-async def set_status(quote_id: str, body: dict):
-    statut = body.get("statut")
-    if statut not in STATUSES:
+async def set_status(quote_id: str, body: StatusUpdate):
+    if body.statut not in STATUSES:
         raise HTTPException(status_code=400, detail="Statut invalide")
     doc = await db.quotes.find_one({"id": quote_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Devis introuvable")
-    update = {"statut": statut, "updated_at": now_iso()}
-    if statut == "envoye":
-        update["sent_at"] = now_iso()
-    if statut == "accepte":
+    company = await get_company()
+    update = {"statut": body.statut, "updated_at": now_iso()}
+    if body.statut == "envoye":
+        delay = body.relance_delay_days or company.get("relance_delay_days", 7)
+        update["sent_at"] = doc.get("sent_at") or now_iso()
+        update["relance_delay_days"] = delay
+        update["next_relance_at"] = (now_utc() + timedelta(days=delay)).isoformat()
+    elif body.statut == "accepte":
         update["accepted_at"] = now_iso()
+        update["next_relance_at"] = None
+    elif body.statut == "refuse":
+        update["refused_at"] = now_iso()
+        update["next_relance_at"] = None
     await db.quotes.update_one({"id": quote_id}, {"$set": update})
     doc.update(update)
     return serialize_quote(doc)
 
 
 @api_router.post("/quotes/{quote_id}/relance")
-async def relance(quote_id: str):
+async def relance_message(quote_id: str):
     doc = await db.quotes.find_one({"id": quote_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Devis introuvable")
+    company = await get_company()
     totaux = compute_totals(doc.get("lignes", []))
-    client_nom = doc.get("client", {}).get("nom", "").strip() or "Madame, Monsieur"
-    prenom = client_nom.split(" ")[0] if client_nom else "Madame, Monsieur"
+    nom = (doc.get("client", {}).get("nom") or "").strip() or "Madame, Monsieur"
     message = (
-        f"Bonjour {prenom},\n\n"
+        f"Bonjour {nom},\n\n"
         f"Je me permets de revenir vers vous concernant le devis {doc['numero']} "
-        f"d'un montant de {totaux['total_ttc']:.2f} € TTC que je vous ai transmis.\n\n"
-        f"Avez-vous pu en prendre connaissance ? Je reste à votre entière disposition "
-        f"pour toute question ou ajustement, et pour convenir d'une date de démarrage des travaux.\n\n"
-        f"Bien cordialement,\n{COMPANY['artisan_name']}\n{COMPANY['name']}\n{COMPANY['phone']}"
+        f"d'un montant de {fmt_eur(totaux['total_ttc'])} TTC que je vous ai transmis.\n\n"
+        f"Avez-vous pu en prendre connaissance ? Je reste à votre entière disposition pour toute "
+        f"question ou ajustement, et pour convenir d'une date de démarrage des travaux.\n\n"
+        f"Bien cordialement,\n{company.get('artisan_name') or company.get('name')}\n"
+        f"{company.get('name')}\n{company.get('phone')}"
     )
     return {"message": message}
 
@@ -299,10 +466,16 @@ async def mark_relance(quote_id: str):
     doc = await db.quotes.find_one({"id": quote_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Devis introuvable")
+    company = await get_company()
+    delay = doc.get("relance_delay_days") or company.get("relance_delay_days", 7)
     await db.quotes.update_one(
         {"id": quote_id},
-        {"$set": {"statut": "a_relancer", "updated_at": now_iso()},
-         "$inc": {"relance_count": 1}},
+        {"$set": {
+            "statut": "relance",
+            "last_relance_at": now_iso(),
+            "next_relance_at": (now_utc() + timedelta(days=delay)).isoformat(),
+            "updated_at": now_iso(),
+        }, "$inc": {"relance_count": 1}},
     )
     doc = await db.quotes.find_one({"id": quote_id})
     return serialize_quote(doc)
@@ -312,99 +485,110 @@ async def mark_relance(quote_id: str):
 async def dashboard_stats():
     docs = await db.quotes.find({}).to_list(1000)
     stats = {
-        "a_preparer": 0, "envoyes": 0, "a_relancer": 0, "acceptes": 0,
+        "a_preparer": 0, "envoyes": 0, "a_relancer": 0, "relances": 0, "acceptes": 0, "refuses": 0,
         "ca_potentiel": 0.0, "ca_accepte": 0.0, "relance_total": 0.0,
         "temps_gagne_min": 0, "total_devis": len(docs),
     }
     for d in docs:
-        t = compute_totals(d.get("lignes", []))
-        ttc = t["total_ttc"]
-        s = d.get("statut")
+        ttc = compute_totals(d.get("lignes", []))["total_ttc"]
+        eff = effective_status(d)
+        stored = d.get("statut")
         stats["temps_gagne_min"] += d.get("time_saved_min", 0)
-        if s == "brouillon":
+        if stored == "relance":
+            stats["relances"] += 1
+        if eff == "brouillon":
             stats["a_preparer"] += 1
-        elif s == "envoye":
+        elif eff == "envoye":
             stats["envoyes"] += 1
             stats["ca_potentiel"] += ttc
-        elif s == "a_relancer":
+        elif eff == "relance":
+            stats["ca_potentiel"] += ttc
+        elif eff == "a_relancer":
             stats["a_relancer"] += 1
             stats["ca_potentiel"] += ttc
             stats["relance_total"] += ttc
-        elif s == "accepte":
+        elif eff == "accepte":
             stats["acceptes"] += 1
             stats["ca_accepte"] += ttc
+        elif eff == "refuse":
+            stats["refuses"] += 1
     for k in ("ca_potentiel", "ca_accepte", "relance_total"):
         stats[k] = round(stats[k], 2)
     return stats
 
 
 # ---------------------------------------------------------------------------
-# Seed demo data
+# Seed
 # ---------------------------------------------------------------------------
 DEMO_QUOTES = [
     {
-        "numero": "DEV-2026-001",
-        "statut": "a_relancer",
-        "client": {"nom": "Mme Dubois", "telephone": "06 45 78 12 90",
-                   "email": "c.dubois@email.fr", "adresse": "8 Rue de la République, 47000 Agen"},
-        "description": "Refaire la peinture du salon de 32 m², deux couches blanc mat, protéger le sol, reboucher quelques fissures et remplacer 8 mètres de plinthes.",
+        "numero": "DEV-2026-001", "statut": "relance",
+        "client": {"nom": "Mme Dubois", "telephone": "06 45 78 12 90", "email": "c.dubois@email.fr", "adresse": "8 Rue de la République, 47000 Agen"},
+        "description": "Refaire la peinture du salon de 32 m² au sol, deux couches blanc mat, protéger le sol, reboucher quelques fissures et remplacer 8 mètres de plinthes.",
         "lignes": [
-            {"designation": "Protection du sol et du mobilier (bâches)", "quantite": 32, "unite": "m²", "prix_unitaire_ht": 2.5, "tva": 10},
-            {"designation": "Rebouchage et ponçage des fissures", "quantite": 1, "unite": "forfait", "prix_unitaire_ht": 120, "tva": 10},
-            {"designation": "Peinture murs et plafond - 2 couches blanc mat", "quantite": 32, "unite": "m²", "prix_unitaire_ht": 28, "tva": 10},
-            {"designation": "Fourniture et pose de plinthes", "quantite": 8, "unite": "ml", "prix_unitaire_ht": 14, "tva": 10},
+            {"designation": "Protection du sol et du mobilier", "quantite": 1, "unite": "forfait", "prix_unitaire_ht": 85, "tva": 10, "source": "catalogue", "catalog_code": "PROT-01"},
+            {"designation": "Rebouchage et traitement de fissure", "quantite": 4, "unite": "u", "prix_unitaire_ht": 18, "tva": 10, "source": "catalogue", "catalog_code": "FISS-01"},
+            {"designation": "Peinture murs 2 couches (acrylique)", "quantite": 58, "unite": "m²", "prix_unitaire_ht": 12.5, "tva": 10, "source": "catalogue", "catalog_code": "PEINT-01"},
+            {"designation": "Fourniture et pose de plinthes", "quantite": 8, "unite": "ml", "prix_unitaire_ht": 14, "tva": 10, "source": "catalogue", "catalog_code": "PLINT-01"},
         ],
-        "sent": True, "relance_count": 1, "days_ago": 9,
+        "sent_days_ago": 12, "relance_count": 1, "last_relance_days_ago": 5, "next_relance_days_ago": 1,
     },
     {
-        "numero": "DEV-2026-002",
-        "statut": "envoye",
-        "client": {"nom": "M. Lefebvre", "telephone": "07 88 23 45 67",
-                   "email": "lefebvre.pro@email.fr", "adresse": "22 Avenue Jean Jaurès, 69007 Lyon"},
-        "description": "Rénovation salle de bain : dépose ancien carrelage, pose faïence murale 12 m² et carrelage sol 6 m², remplacement meuble vasque.",
+        "numero": "DEV-2026-002", "statut": "envoye",
+        "client": {"nom": "M. Lefebvre", "telephone": "07 88 23 45 67", "email": "lefebvre.pro@email.fr", "adresse": "22 Avenue Jean Jaurès, 69007 Lyon"},
+        "description": "Rénovation salle de bain : dépose ancien carrelage, pose faïence murale 12 m² et carrelage sol 6 m².",
         "lignes": [
-            {"designation": "Dépose ancien carrelage et évacuation", "quantite": 18, "unite": "m²", "prix_unitaire_ht": 22, "tva": 10},
-            {"designation": "Pose faïence murale", "quantite": 12, "unite": "m²", "prix_unitaire_ht": 55, "tva": 10},
-            {"designation": "Pose carrelage au sol", "quantite": 6, "unite": "m²", "prix_unitaire_ht": 60, "tva": 10},
-            {"designation": "Fourniture et pose meuble vasque", "quantite": 1, "unite": "u", "prix_unitaire_ht": 480, "tva": 10},
+            {"designation": "Dépose et évacuation ancien revêtement", "quantite": 18, "unite": "m²", "prix_unitaire_ht": 22, "tva": 10, "source": "catalogue", "catalog_code": "DEPOSE-01"},
+            {"designation": "Pose faïence murale", "quantite": 12, "unite": "m²", "prix_unitaire_ht": 55, "tva": 10, "source": "catalogue", "catalog_code": "CARR-01"},
+            {"designation": "Pose carrelage au sol", "quantite": 6, "unite": "m²", "prix_unitaire_ht": 60, "tva": 10, "source": "catalogue", "catalog_code": "CARR-02"},
         ],
-        "sent": True, "relance_count": 0, "days_ago": 3,
+        "sent_days_ago": 2, "relance_count": 0, "next_relance_days_ahead": 5,
     },
     {
-        "numero": "DEV-2026-003",
-        "statut": "accepte",
-        "client": {"nom": "Boulangerie Petitpain", "telephone": "04 78 12 34 56",
-                   "email": "contact@petitpain.fr", "adresse": "5 Place du Marché, 69003 Lyon"},
-        "description": "Peinture de la devanture et de l'arrière-boutique, environ 60 m², teinte au choix.",
+        "numero": "DEV-2026-003", "statut": "accepte",
+        "client": {"nom": "Boulangerie Petitpain", "telephone": "04 78 12 34 56", "email": "contact@petitpain.fr", "adresse": "5 Place du Marché, 69003 Lyon"},
+        "description": "Peinture de la devanture et de l'arrière-boutique, environ 60 m² de murs.",
         "lignes": [
-            {"designation": "Préparation des supports et sous-couche", "quantite": 60, "unite": "m²", "prix_unitaire_ht": 12, "tva": 20},
-            {"designation": "Peinture finition 2 couches", "quantite": 60, "unite": "m²", "prix_unitaire_ht": 26, "tva": 20},
+            {"designation": "Préparation des supports (ponçage, lessivage)", "quantite": 60, "unite": "m²", "prix_unitaire_ht": 6.5, "tva": 20, "source": "catalogue", "catalog_code": "PREP-01"},
+            {"designation": "Peinture murs 2 couches (acrylique)", "quantite": 60, "unite": "m²", "prix_unitaire_ht": 12.5, "tva": 20, "source": "catalogue", "catalog_code": "PEINT-01"},
         ],
-        "sent": True, "accepted": True, "relance_count": 0, "days_ago": 15,
+        "sent_days_ago": 15, "accepted": True, "relance_count": 0,
     },
     {
-        "numero": "DEV-2026-004",
-        "statut": "brouillon",
-        "client": {"nom": "M. Garcia", "telephone": "06 11 22 33 44",
-                   "email": "garcia.j@email.fr", "adresse": "3 Impasse des Lilas, 69100 Villeurbanne"},
+        "numero": "DEV-2026-004", "statut": "brouillon",
+        "client": {"nom": "M. Garcia", "telephone": "06 11 22 33 44", "email": "garcia.j@email.fr", "adresse": "3 Impasse des Lilas, 69100 Villeurbanne"},
         "description": "Pose de parquet flottant dans deux chambres, environ 28 m².",
         "lignes": [
-            {"designation": "Fourniture parquet flottant chêne", "quantite": 28, "unite": "m²", "prix_unitaire_ht": 32, "tva": 10},
-            {"designation": "Pose parquet flottant + sous-couche", "quantite": 28, "unite": "m²", "prix_unitaire_ht": 24, "tva": 10},
-            {"designation": "Fourniture et pose de plinthes", "quantite": 22, "unite": "ml", "prix_unitaire_ht": 12, "tva": 10},
+            {"designation": "Fourniture et pose parquet flottant", "quantite": 28, "unite": "m²", "prix_unitaire_ht": 56, "tva": 10, "source": "catalogue", "catalog_code": "PARQ-01"},
+            {"designation": "Fourniture et pose de plinthes", "quantite": 22, "unite": "ml", "prix_unitaire_ht": 14, "tva": 10, "source": "catalogue", "catalog_code": "PLINT-01"},
         ],
-        "sent": False, "relance_count": 0, "days_ago": 0,
+        "relance_count": 0,
     },
 ]
 
 
-async def seed_if_empty():
-    count = await db.quotes.count_documents({})
-    if count > 0:
+async def seed_catalog():
+    if await db.catalog.count_documents({}) > 0:
         return
-    from datetime import timedelta
+    for c in DEMO_CATALOG:
+        await db.catalog.insert_one(CatalogItem(**c).model_dump())
+    logger.info("Seeded demo catalog")
+
+
+async def seed_quotes():
+    if await db.quotes.count_documents({}) > 0:
+        return
     for d in DEMO_QUOTES:
-        created = datetime.now(timezone.utc) - timedelta(days=d.get("days_ago", 0))
+        created = now_utc() - timedelta(days=d.get("sent_days_ago", 0))
+        sent_at = created.isoformat() if "sent_days_ago" in d else None
+        next_relance = None
+        if "next_relance_days_ago" in d:
+            next_relance = (now_utc() - timedelta(days=d["next_relance_days_ago"])).isoformat()
+        elif "next_relance_days_ahead" in d:
+            next_relance = (now_utc() + timedelta(days=d["next_relance_days_ahead"])).isoformat()
+        last_relance = None
+        if "last_relance_days_ago" in d:
+            last_relance = (now_utc() - timedelta(days=d["last_relance_days_ago"])).isoformat()
         q = Quote(
             numero=d["numero"],
             client=Client(**d["client"]),
@@ -414,8 +598,10 @@ async def seed_if_empty():
             relance_count=d.get("relance_count", 0),
             created_at=created.isoformat(),
             updated_at=created.isoformat(),
-            sent_at=created.isoformat() if d.get("sent") else None,
+            sent_at=sent_at,
             accepted_at=created.isoformat() if d.get("accepted") else None,
+            last_relance_at=last_relance,
+            next_relance_at=next_relance,
         )
         await db.quotes.insert_one(q.model_dump())
     logger.info("Seeded demo quotes")
@@ -424,13 +610,19 @@ async def seed_if_empty():
 @api_router.post("/seed")
 async def force_seed():
     await db.quotes.delete_many({})
-    await seed_if_empty()
+    await db.catalog.delete_many({})
+    await db.settings.delete_many({"key": "company"})
+    await seed_catalog()
+    await get_company()
+    await seed_quotes()
     return {"seeded": True}
 
 
 @app.on_event("startup")
 async def startup():
-    await seed_if_empty()
+    await seed_catalog()
+    await get_company()
+    await seed_quotes()
 
 
 app.include_router(api_router)

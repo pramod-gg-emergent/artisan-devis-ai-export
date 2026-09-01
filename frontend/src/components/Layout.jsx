@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, FileText, Plus, Sparkles } from "lucide-react";
+import { LayoutDashboard, FileText, Plus, Sparkles, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ARTISAN = "Martin Rénovation";
@@ -13,6 +13,7 @@ export const Layout = ({ children }) => {
   const tabs = [
     { key: "dash", label: "Accueil", icon: LayoutDashboard, to: "/", active: path === "/" },
     { key: "quotes", label: "Devis", icon: FileText, to: "/devis", active: path.startsWith("/devis") },
+    { key: "settings", label: "Paramètres", icon: Settings, to: "/parametres", active: path.startsWith("/parametres") },
   ];
 
   return (
@@ -36,9 +37,19 @@ export const Layout = ({ children }) => {
               <div className="text-[11px] font-medium text-cyan-200">Assistant Devis IA</div>
             </div>
           </button>
-          <div className="flex items-center gap-2 rounded-full bg-white/10 py-1.5 pl-1.5 pr-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-lagoon text-xs font-bold">MR</div>
-            <span className="hidden text-sm font-semibold sm:block">{ARTISAN}</span>
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="nav-settings-btn"
+              onClick={() => navigate("/parametres")}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+              title="Paramètres"
+            >
+              <Settings size={18} />
+            </button>
+            <div className="flex items-center gap-2 rounded-full bg-white/10 py-1.5 pl-1.5 pr-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-lagoon text-xs font-bold">MR</div>
+              <span className="hidden text-sm font-semibold sm:block">{ARTISAN}</span>
+            </div>
           </div>
         </div>
       </header>

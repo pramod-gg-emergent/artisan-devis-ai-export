@@ -25,7 +25,7 @@ export default function Dashboard() {
   const { data: stats } = useQuery({ queryKey: ["stats"], queryFn: api.stats });
   const { data: quotes = [] } = useQuery({ queryKey: ["quotes"], queryFn: () => api.quotes() });
 
-  const todo = quotes.filter((q) => ["brouillon", "a_relancer"].includes(q.statut));
+  const todo = quotes.filter((q) => ["brouillon", "a_relancer"].includes(q.effective_statut));
 
   return (
     <div className="space-y-6 animate-float-in">
@@ -117,7 +117,7 @@ export const QuoteRow = ({ q, onClick }) => (
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
         <span className="truncate font-heading text-base font-bold text-petrol">{q.client?.nom || "Client"}</span>
-        <StatusBadge statut={q.statut} />
+        <StatusBadge statut={q.effective_statut || q.statut} />
       </div>
       <div className="mt-0.5 truncate text-xs text-muted-foreground">
         {q.numero} · {dateShort(q.created_at)}

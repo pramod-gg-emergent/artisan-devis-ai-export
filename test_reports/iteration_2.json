@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 2 fully tested. Backend: 19/19 pytest tests pass (company/catalog CRUD, quotes list with effective_statut, DEV-2026-001 derived a_relancer, filter, two-phase AI analyze (questions then priced lines with source/catalog_code), status workflow with sent_at/next_relance_at/refused_at/accepted_at, mark-relance increments count and sets statut=relance, French relance message with full name and '1 093,40 € TTC' format, quote update persistence, dashboard stats). Frontend (Playwright): Dashboard, Settings (company + catalog + reset demo), Quotes list, QuoteDetail with relance-info + relance modal prefilled message ('Bonjour Mme Dubois... 1 093,40 € TTC...'), send-modal with delay-5/7/10 + confirm-send-btn transitions brouillon -> envoye with next relance date, New Quote wizard AI questions panel (4 questions returned), answers submit produces 6 priced lines with source badges (Catalogue · PROT-01, etc.), and 'Hypothèses IA' note. Wall surface correctly derived from answers (60 m² peinture murs, not the 32 m² floor area).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Settings (TVA select) and LineEditor (line-tva select)",
+        "issues": [
+          "React hydration warning: <span> cannot be a child of <option>. Caused by the visual-editor dev wrapper injecting a <span data-ve-dynamic> inside <option> elements when the value expression is a numeric literal like value={5.5}. Cosmetic only in preview but pollutes console; consider casting to string (value={String(v)}) or moving numeric options to constants to help the dev wrapper avoid instrumenting them."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Suppress the <option><span> hydration warning by rendering TVA options with String(v) values so the dev-tools instrumentation does not insert a span child inside <option>."
+  ],
+  "critical_code_review_comments": [
+    "server.py is a single 640-line file — still manageable but nearing the split-threshold. Consider splitting into routers/quotes.py, routers/analyze.py, seed.py before next iteration.",
+    "AI JSON parsing uses a broad regex \\{.*\\} — resilient here but can trip on multi-object responses. Not currently an issue but worth logging raw response on JSONDecodeError.",
+    "compute_totals treats tva=None as 0 for TTC computation. That's the right default but the UI should make clear that 'À définir' lines are not counted in TVA total (currently they aren't, so OK).",
+    "In serialize_quote, the mongo _id is popped correctly. Good.",
+    "seed uses count>0 short-circuit; POST /api/seed correctly wipes first — good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "No auth required.",
+  "seed_data_creation": "POST /api/seed was called (session-scoped pytest fixture). Also created ephemeral TEST_ prefixed brouillons via /api/quotes for status-workflow tests; DEV-2026-004 was sent (status transitioned to envoye) as part of the frontend send-flow check.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file at /app/backend/tests/backend_test.py runs in ~8s and covers all iteration-2 endpoints. Old iter1 file moved to backend_test_iter1.py.bak. Note: running the backend suite reseeds data (POST /api/seed) and then PUT /api/company flips is_demo=false; the demo badge in Settings will only show after another /api/seed call. AI analyze took ~5s for questions and ~10s for lines with gpt-5.4.",
+  "rca of the issue": "N/A - no failures."
+}

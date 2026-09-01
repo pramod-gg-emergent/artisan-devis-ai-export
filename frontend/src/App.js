@@ -7,6 +7,7 @@ import Dashboard from "@/pages/Dashboard";
 import QuotesList from "@/pages/QuotesList";
 import NewQuote from "@/pages/NewQuote";
 import QuoteDetail from "@/pages/QuoteDetail";
+import Settings from "@/pages/Settings";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
             <Route path="/devis" element={<QuotesList />} />
             <Route path="/nouveau" element={<NewQuote />} />
             <Route path="/devis/:id" element={<QuoteDetail />} />
+            <Route path="/parametres" element={<Settings />} />
           </Routes>
         </Layout>
       </BrowserRouter>
