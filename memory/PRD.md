@@ -18,6 +18,12 @@ Application web responsive en français permettant à un artisan de transformer 
 - Prévisualisation devis pro (coordonnées, numéro, date, client, tableau, totaux, mentions légales).
 - Statuts Brouillon/Envoyé/À relancer/Accepté + actions Enregistrer/Envoyer/Marquer accepté/Relancer (message prérempli modifiable).
 
+## Implémenté (2026-09-01) — Itération 5
+- ✅ Saisie vocale des informations client (écran Nouveau devis, étape 1) : bouton « Renseigner le client à la voix » qui dicte une phrase naturelle et remplit automatiquement nom/raison sociale, adresse, téléphone, email (POST /api/parse-client). Champs affichés pour vérification/correction avant validation.
+- ✅ Micro individuel par champ (nom, téléphone, email, adresse) ; email dicté avec « arobase »/« point » normalisé + note de vérification visuelle.
+- ✅ Saisie clavier conservée en secours si la reconnaissance vocale est indisponible. Aucun autre changement (IA, TVA, PDF, email, lien client, relances, statuts, design).
+- ✅ Tests : 100% (backend 6/6, frontend) — aucune régression.
+
 ## Implémenté (2026-09-01) — Itération 4
 - ✅ Saisie vocale des précisions IA : micro par champ + bouton global « Répondre à la voix » ; l'IA répartit une dictée libre dans les bonnes questions (POST /api/dispatch-answers). Saisie texte conservée en secours si la reconnaissance vocale est indisponible.
 - ✅ Modification vocale du devis : « Modifier à la voix » (POST /api/edit-voice) interprète des instructions naturelles (changer prix/quantité/unité/TVA, ajouter/supprimer une ligne) et affiche les modifications proposées AVANT application — jamais de modification silencieuse.

@@ -23,6 +23,8 @@ export const api = {
     client.post("/dispatch-answers", { questions, transcript }).then((r) => r.data),
   editVoice: (lignes, transcript) =>
     client.post("/edit-voice", { lignes, transcript }).then((r) => r.data),
+  parseClient: (transcript) =>
+    client.post("/parse-client", { transcript }).then((r) => r.data),
   setStatus: (id, statut, extra = {}) =>
     client.post(`/quotes/${id}/status`, { statut, ...extra }).then((r) => r.data),
   relanceMessage: (id) => client.post(`/quotes/${id}/relance`).then((r) => r.data),

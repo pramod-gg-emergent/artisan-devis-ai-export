@@ -26,6 +26,17 @@ const AI_STEPS = [
   "Application du catalogue tarifaire…",
 ];
 
+const normalizeEmailVoice = (t) =>
+  (t || "")
+    .toLowerCase()
+    .replace(/\s*arobase\s*/g, "@")
+    .replace(/\s*(?:point|dot)\s*/g, ".")
+    .replace(/\s*tiret\s+bas\s*/g, "_")
+    .replace(/\s*(?:underscore|souligné)\s*/g, "_")
+    .replace(/\s*tiret\s*/g, "-")
+    .replace(/\s+/g, "")
+    .replace(/^[.]+|[.]+$/g, "");
+
 export default function NewQuote() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -55,6 +66,8 @@ export default function NewQuote() {
 
   const dict = useDictation();
   const [micTarget, setMicTarget] = useState(null);
+  const [clientTranscript, setClientTranscript] = useState("");
+  const [parsingClient, setParsingClient] = useState(false);
 
   const { data: editQuote } = useQuery({
     queryKey: ["quote", editId],
@@ -86,6 +99,38 @@ export default function NewQuote() {
       dict.stop();
       setMicTarget(null);
     }
+  };
+
+  const parseClientVoice = async (transcript) => {
+    if (!transcript.trim()) return;
+    setParsingClient(true);
+    try {
+      const res = await api.parseClient(transcript);
+      setClient((prev) => ({
+        nom: res.nom || prev.nom,
+        telephone: res.telephone || prev.telephone,
+        email: res.email || prev.email,
+        adresse: res.adresse || prev.adresse,
+      }));
+      toast.success("Client rempli — vérifiez et corrigez si besoin");
+    } catch {
+      toast.error("Extraction vocale impossible");
+    } finally {
+      setClientTranscript("");
+      setParsingClient(false);
+    }
+  };
+
+  const MicField = ({ target, testid, opts }) => {
+    if (!dict.supported) return null;
+    const active = dict.listening && micTarget === target;
+    return (
+      <button type="button" data-testid={testid} onClick={() => toggleMic(target, opts)}
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white transition-transform active:scale-95 ${
+          active ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
+        {active ? <MicOff size={18} /> : <Mic size={18} />}
+      </button>
+    );
   };
 
   const callAnalyze = async (answersText) => {
@@ -223,30 +268,73 @@ export default function NewQuote() {
         <section className="space-y-4">
           <div>
             <h1 className="font-heading text-2xl font-extrabold text-petrol">Informations client</h1>
-            <p className="text-sm text-muted-foreground">Coordonnées du client et adresse du chantier.</p>
+            <p className="text-sm text-muted-foreground">Dictez ou saisissez les coordonnées du client.</p>
           </div>
+
+          {dict.supported && (
+            <div className="rounded-2xl border border-lagoon/30 bg-lagoon-light p-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-lagoon-glow">
+                <Volume2 size={16} /> Renseigner le client à la voix
+              </div>
+              <p className="mt-1 text-xs text-petrol/70">
+                Ex : « Client Jean Dupont, 12 rue Victor Hugo à Agen, téléphone 06 12 34 56 78, email jean point dupont arobase gmail point com ».
+              </p>
+              <button data-testid="voice-client-button"
+                onClick={() => toggleMic("client-global", { base: "", onLive: setClientTranscript, onStop: parseClientVoice })}
+                className={`mt-2 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-transform active:scale-95 ${
+                  dict.listening && micTarget === "client-global" ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
+                {dict.listening && micTarget === "client-global" ? <MicOff size={18} /> : <Mic size={18} />}
+                {dict.listening && micTarget === "client-global" ? "Arrêter la dictée" : "Renseigner le client à la voix"}
+              </button>
+              {dict.listening && micTarget === "client-global" && (
+                <p className="mt-2 text-xs italic text-petrol/70">« {clientTranscript || "…"} »</p>
+              )}
+              {parsingClient && (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-lagoon-glow"><Loader2 className="animate-spin" size={12} /> Extraction des informations…</p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-3 rounded-2xl border border-petrol/10 bg-card p-4 shadow-card">
-            <Field label="Nom du client">
-              <Input data-testid="client-nom-input" value={client.nom || ""}
-                onChange={(e) => setClient({ ...client, nom: e.target.value })}
-                placeholder="Ex : Mme Dubois" className="h-12" />
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vérifiez et corrigez si besoin</div>
+            <Field label="Nom / Raison sociale">
+              <div className="flex items-center gap-2">
+                <Input data-testid="client-nom-input" value={client.nom || ""}
+                  onChange={(e) => setClient({ ...client, nom: e.target.value })}
+                  placeholder="Ex : Mme Dubois" className="h-12" />
+                <MicField target="c-nom" testid="client-mic-nom"
+                  opts={{ base: client.nom || "", onLive: (t) => setClient((c) => ({ ...c, nom: t })) }} />
+              </div>
             </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Téléphone">
-                <Input data-testid="client-tel-input" value={client.telephone || ""}
-                  onChange={(e) => setClient({ ...client, telephone: e.target.value })}
-                  placeholder="06 12 34 56 78" className="h-12" />
+                <div className="flex items-center gap-2">
+                  <Input data-testid="client-tel-input" value={client.telephone || ""}
+                    onChange={(e) => setClient({ ...client, telephone: e.target.value })}
+                    placeholder="06 12 34 56 78" className="h-12" />
+                  <MicField target="c-tel" testid="client-mic-tel"
+                    opts={{ base: client.telephone || "", onLive: (t) => setClient((c) => ({ ...c, telephone: t })) }} />
+                </div>
               </Field>
               <Field label="Email">
-                <Input data-testid="client-email-input" value={client.email || ""}
-                  onChange={(e) => setClient({ ...client, email: e.target.value })}
-                  placeholder="client@email.fr" className="h-12" />
+                <div className="flex items-center gap-2">
+                  <Input data-testid="client-email-input" value={client.email || ""}
+                    onChange={(e) => setClient({ ...client, email: e.target.value })}
+                    placeholder="client@email.fr" className="h-12" />
+                  <MicField target="c-email" testid="client-mic-email"
+                    opts={{ base: client.email || "", onLive: (t) => setClient((c) => ({ ...c, email: normalizeEmailVoice(t) })) }} />
+                </div>
+                <p className="mt-1 text-[11px] text-amber-relance">Vérifiez visuellement l'email dicté avant utilisation.</p>
               </Field>
             </div>
             <Field label="Adresse du chantier">
-              <Input data-testid="client-adresse-input" value={client.adresse || ""}
-                onChange={(e) => setClient({ ...client, adresse: e.target.value })}
-                placeholder="Rue, code postal, ville" className="h-12" />
+              <div className="flex items-center gap-2">
+                <Input data-testid="client-adresse-input" value={client.adresse || ""}
+                  onChange={(e) => setClient({ ...client, adresse: e.target.value })}
+                  placeholder="Rue, code postal, ville" className="h-12" />
+                <MicField target="c-adresse" testid="client-mic-adresse"
+                  opts={{ base: client.adresse || "", onLive: (t) => setClient((c) => ({ ...c, adresse: t })) }} />
+              </div>
             </Field>
             <button data-testid="prefill-client-btn"
               onClick={() => setClient({ nom: "Mme Dubois", telephone: "06 45 78 12 90", email: "c.dubois@email.fr", adresse: "8 Rue de la République, 47000 Agen" })}

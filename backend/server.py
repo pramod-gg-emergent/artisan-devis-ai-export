@@ -1183,6 +1183,45 @@ async def edit_voice(req: VoiceEditRequest):
             "totaux": compute_totals(out)}
 
 
+class ParseClientRequest(BaseModel):
+    transcript: str
+
+
+def normalize_email(s: str) -> str:
+    s = (s or "").lower()
+    s = re.sub(r"\s*arobase\s*", "@", s)
+    s = re.sub(r"\s*(?:point|dot)\s*", ".", s)
+    s = re.sub(r"\s*tiret\s+bas\s*", "_", s)
+    s = re.sub(r"\s*(?:underscore|souligné)\s*", "_", s)
+    s = re.sub(r"\s*tiret\s*", "-", s)
+    s = s.replace(" ", "").strip(" .")
+    return s
+
+
+@api_router.post("/parse-client")
+async def parse_client(req: ParseClientRequest):
+    if not req.transcript.strip():
+        return {"nom": "", "adresse": "", "telephone": "", "email": ""}
+    system = (
+        "Tu extrais les coordonnées d'un client à partir d'une phrase dictée en français. "
+        "Retourne UNIQUEMENT du JSON {\"nom\":str,\"adresse\":str,\"telephone\":str,\"email\":str}. "
+        "nom = nom de la personne OU raison sociale. adresse = adresse complète (numéro, rue, code postal, ville). "
+        "Pour l'email, convertis 'arobase' en @ et 'point' en '.', supprime les espaces, mets en minuscules. "
+        "Pour le téléphone, garde les chiffres (espaces autorisés). Laisse une chaîne vide si l'information est absente."
+    )
+    try:
+        data = await _llm_json(system, req.transcript)
+    except Exception as e:
+        logger.exception("parse-client failed")
+        raise HTTPException(status_code=500, detail=f"Extraction impossible: {e}")
+    return {
+        "nom": str(data.get("nom", "")).strip(),
+        "adresse": str(data.get("adresse", "")).strip(),
+        "telephone": str(data.get("telephone", "")).strip(),
+        "email": normalize_email(str(data.get("email", ""))),
+    }
+
+
 app.include_router(api_router)
 
 app.add_middleware(
