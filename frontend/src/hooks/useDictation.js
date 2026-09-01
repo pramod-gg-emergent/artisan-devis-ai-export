@@ -1,115 +1,158 @@
 import { useRef, useState, useCallback } from "react";
 import { API } from "@/lib/apiClient";
 
-// Dictation hook. Prefers the browser Web Speech API (live streaming);
-// falls back to MediaRecorder + Emergent-managed Whisper STT (batch) when unavailable.
+// Dictation hook — MediaRecorder + Emergent-managed Whisper STT ONLY.
+// Web Speech API removed entirely (unreliable / auto-stops on mobile).
+// Recording stays active until the user explicitly calls stop().
+
+const MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+];
+
+function pickMimeType() {
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return "";
+  for (const m of MIME_CANDIDATES) {
+    try {
+      if (MediaRecorder.isTypeSupported(m)) return m;
+    } catch (e) {
+      console.error("[useDictation] isTypeSupported check failed for", m, e);
+    }
+  }
+  return "";
+}
+
+function extFromMime(mime) {
+  if (!mime) return "webm";
+  if (mime.includes("mp4")) return "mp4";
+  if (mime.includes("mpeg")) return "mp3";
+  if (mime.includes("ogg")) return "ogg";
+  return "webm";
+}
+
 export function useDictation() {
-  const recRef = useRef(null);
-  const finalRef = useRef("");
   const mrRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
+  const baseRef = useRef("");
   const liveRef = useRef(null);
   const doneRef = useRef(null);
+
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
 
-  const SR =
-    typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
-  const hasMR =
-    typeof window !== "undefined" &&
+  const supported =
+    typeof navigator !== "undefined" &&
     !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) &&
+    typeof window !== "undefined" &&
     typeof window.MediaRecorder !== "undefined";
-  const mode = SR ? "speech" : hasMR ? "whisper" : null;
-  const supported = !!mode;
 
   const start = useCallback(
-    (base = "", onLive, onDone) => {
+    async (base = "", onLive, onDone) => {
+      if (!supported) {
+        console.error("[useDictation] MediaRecorder/getUserMedia not supported on this browser");
+        return;
+      }
+      baseRef.current = base ? base + " " : "";
       liveRef.current = onLive;
       doneRef.current = onDone;
-      finalRef.current = base ? base + " " : "";
+      chunksRef.current = [];
 
-      if (SR) {
-        const rec = new SR();
-        rec.lang = "fr-FR";
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.onresult = (e) => {
-          let interim = "";
-          for (let i = e.resultIndex; i < e.results.length; i++) {
-            const r = e.results[i];
-            if (r.isFinal) finalRef.current += r[0].transcript + " ";
-            else interim += r[0].transcript;
-          }
-          onLive && onLive((finalRef.current + interim).trim());
-        };
-        rec.onend = () => {
-          setListening(false);
-          onDone && onDone(finalRef.current.trim());
-        };
-        rec.onerror = () => setListening(false);
-        recRef.current = rec;
-        try {
-          rec.start();
-          setListening(true);
-        } catch {
-          setListening(false);
-        }
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("[useDictation] getUserMedia OK");
+      } catch (e) {
+        console.error("[useDictation] getUserMedia failed:", e);
+        setListening(false);
+        return;
+      }
+      streamRef.current = stream;
+
+      const mimeType = pickMimeType();
+      let mr;
+      try {
+        mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        console.log("[useDictation] MediaRecorder created, mimeType:", mr.mimeType || "(default)");
+      } catch (e) {
+        console.error("[useDictation] MediaRecorder creation failed:", e);
+        stream.getTracks().forEach((t) => t.stop());
+        setListening(false);
         return;
       }
 
-      if (hasMR) {
-        navigator.mediaDevices
-          .getUserMedia({ audio: true })
-          .then((stream) => {
-            streamRef.current = stream;
-            chunksRef.current = [];
-            const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
-            const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-            mr.ondataavailable = (e) => {
-              if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
-            };
-            mr.onstop = async () => {
-              setListening(false);
-              const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
-              streamRef.current && streamRef.current.getTracks().forEach((t) => t.stop());
-              if (!blob.size) return;
-              setTranscribing(true);
-              try {
-                const fd = new FormData();
-                fd.append("file", blob, "audio.webm");
-                const res = await fetch(`${API}/transcribe`, { method: "POST", body: fd });
-                const data = await res.json();
-                const text = ((finalRef.current || "") + " " + (data.text || "")).trim();
-                liveRef.current && liveRef.current(text);
-                doneRef.current && doneRef.current(text);
-              } catch {
-                /* ignore transcription errors */
-              } finally {
-                setTranscribing(false);
-              }
-            };
-            mrRef.current = mr;
-            mr.start();
-            setListening(true);
-          })
-          .catch(() => setListening(false));
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mr.onerror = (e) => console.error("[useDictation] MediaRecorder error:", e.error || e);
+      mr.onstop = async () => {
+        console.log("[useDictation] recorder stopped");
+        const type = mr.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type });
+        console.log("[useDictation] blob size/type:", blob.size, blob.type);
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+        }
+        if (!blob.size) {
+          console.error("[useDictation] empty audio blob — nothing to transcribe");
+          return;
+        }
+        setTranscribing(true);
+        try {
+          const fd = new FormData();
+          fd.append("file", blob, `audio.${extFromMime(type)}`);
+          console.log("[useDictation] POST /api/transcribe →", `${API}/transcribe`);
+          const res = await fetch(`${API}/transcribe`, { method: "POST", body: fd });
+          if (!res.ok) {
+            const txt = await res.text().catch(() => "");
+            console.error("[useDictation] transcribe HTTP error:", res.status, txt);
+            return;
+          }
+          const data = await res.json();
+          console.log("[useDictation] transcription received:", data && data.text);
+          const text = ((baseRef.current || "") + (data.text || "")).trim();
+          liveRef.current && liveRef.current(text);
+          doneRef.current && doneRef.current(text);
+        } catch (e) {
+          console.error("[useDictation] transcribe request failed:", e);
+        } finally {
+          setTranscribing(false);
+        }
+      };
+
+      mrRef.current = mr;
+      try {
+        mr.start(); // no timeslice: single blob on stop, keeps recording until stop()
+        setListening(true);
+        console.log("[useDictation] recorder started");
+      } catch (e) {
+        console.error("[useDictation] recorder start failed:", e);
+        stream.getTracks().forEach((t) => t.stop());
+        setListening(false);
       }
     },
-    [SR, hasMR]
+    [supported]
   );
 
   const stop = useCallback(() => {
-    if (recRef.current && SR) {
-      try { recRef.current.stop(); } catch {}
-    } else if (mrRef.current) {
-      try { if (mrRef.current.state !== "inactive") mrRef.current.stop(); } catch {}
+    const mr = mrRef.current;
+    if (mr && mr.state !== "inactive") {
+      try {
+        mr.stop();
+      } catch (e) {
+        console.error("[useDictation] recorder stop failed:", e);
+      }
     }
     setListening(false);
-    return finalRef.current.trim();
-  }, [SR]);
+    return (baseRef.current || "").trim();
+  }, []);
 
-  return { supported, mode, listening, transcribing, start, stop };
+  return { supported, mode: "whisper", listening, transcribing, start, stop };
 }
 
 export default useDictation;

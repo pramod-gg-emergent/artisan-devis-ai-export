@@ -18,6 +18,11 @@ Application web responsive en français permettant à un artisan de transformer 
 - Prévisualisation devis pro (coordonnées, numéro, date, client, tableau, totaux, mentions légales).
 - Statuts Brouillon/Envoyé/À relancer/Accepté + actions Enregistrer/Envoyer/Marquer accepté/Relancer (message prérempli modifiable).
 
+## Correctif vocal (2026-09-01) — Itération 9 (useDictation.js uniquement)
+- ✅ Bug mobile résolu : le micro démarrait puis s'arrêtait aussitôt (Web Speech API). `useDictation.js` réécrit pour n'utiliser QUE getUserMedia + MediaRecorder + POST /api/transcribe (Whisper). Web Speech API totalement supprimée (mode toujours 'whisper').
+- ✅ Enregistrement actif jusqu'au clic explicite « Arrêter » ; aucun useEffect/cleanup/stale closure n'appelle stop() ; deps useCallback corrigées ([supported] / []).
+- ✅ catch{} vides remplacés par une vraie gestion d'erreur + console.error ; logs d'étapes (getUserMedia → MediaRecorder → started → stopped → blob → POST → transcription) ; MIME négocié via MediaRecorder.isTypeSupported. Vérifié : blob non vide (~43 Ko webm/opus) et POST /api/transcribe déclenché. Tests 100% (backend 3/3, frontend).
+
 ## Correctif déploiement (2026-09-01) — Itération 8
 - ✅ Blocage résolu : sonde de santé Kubernetes `GET /health` (sans préfixe /api) renvoyait 404 → ajout de `@app.get("/health")` → `{"status":"ok"}` (200 vérifié).
 - ✅ Durcissement prod : `POST /api/seed` et `POST /api/catalog/reset` protégés par `ALLOW_DEMO_RESET` (403 si absent ; les données Atlas de prod ne sont jamais effacées). Seed de démarrage idempotent (insertion si vide) conservé.

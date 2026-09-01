@@ -1,0 +1,24 @@
+{
+  "summary": "Verified voice dictation bug fix in useDictation.js. Backend /api/transcribe: 200 with {text:str} for wav, 400 empty, 413 >25MB (3/3 pytest passed). Frontend on /nouveau (mobile viewport 390x844) with mic permission granted: click voice-primary-button starts recording and STAYS recording (button flips to 'Arrêter la dictée' and remains for >3s, no immediate stop). Second click stops and POST /api/transcribe is fired exactly once; response returned with text. All 7 ordered step console logs present: 'getUserMedia OK' -> 'MediaRecorder created' -> 'recorder started' -> 'recorder stopped' -> 'blob size/type' (43878 bytes audio/webm;codecs=opus) -> 'POST /api/transcribe' -> 'transcription received'. No SpeechRecognition/webkitSpeechRecognition references remain in useDictation.js; mode returned is 'whisper'. MIME negotiated via MediaRecorder.isTypeSupported (picked audio/webm;codecs=opus). Keyboard regression on New Quote passes (filled 4 client inputs, Continuer advanced to step 2 'Décrivez le chantier').",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter9_transcribe.py",
+    "/app/test_reports/pytest/iter9.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "useDictation.js correctly uses useCallback deps [supported] for start and [] for stop; no useEffect/cleanup calls stop(). Recording lifecycle owned by user actions only — fix is sound.",
+    "onstop handler tears down mic tracks and posts the FormData; blob-size guard avoids empty POSTs. Good error handling with console.error in every catch. Consider surfacing a toast on transcribe failure (non-blocking).",
+    "mr.start() called with NO timeslice — single blob assembled on stop, matches the requirement.",
+    "Temporary step logs are useful for mobile debug; consider gating them behind a debug flag before prod release."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter9_transcribe.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "None (no auth).",
+  "seed_data_creation": "None needed for this bug fix.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Voice dictation now uses MediaRecorder + Whisper via POST /api/transcribe exclusively (Web Speech API fully removed). Headless Chromium in this harness supports MediaRecorder and getUserMedia after grant_permissions(['microphone']); an actual audio blob (~43KB webm/opus) was produced without needing --use-fake-device flags. Regression tests live at /app/backend/tests/test_iter9_transcribe.py.",
+  "rca of the issue": "Previous useDictation.js relied on Web Speech API (SpeechRecognition) which on mobile Chrome triggers an immediate 'end' event / stops shortly after start, and never reaches POST /api/transcribe. Fix: replaced entirely with getUserMedia + MediaRecorder(no timeslice) + onstop -> Blob -> POST /api/transcribe. Recording now stays active until user explicitly clicks stop (verified in-browser)."
+}
