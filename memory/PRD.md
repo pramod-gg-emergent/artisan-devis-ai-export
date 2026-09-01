@@ -18,6 +18,14 @@ Application web responsive en français permettant à un artisan de transformer 
 - Prévisualisation devis pro (coordonnées, numéro, date, client, tableau, totaux, mentions légales).
 - Statuts Brouillon/Envoyé/À relancer/Accepté + actions Enregistrer/Envoyer/Marquer accepté/Relancer (message prérempli modifiable).
 
+## Implémenté (2026-09-01) — Itération 4
+- ✅ Saisie vocale des précisions IA : micro par champ + bouton global « Répondre à la voix » ; l'IA répartit une dictée libre dans les bonnes questions (POST /api/dispatch-answers). Saisie texte conservée en secours si la reconnaissance vocale est indisponible.
+- ✅ Modification vocale du devis : « Modifier à la voix » (POST /api/edit-voice) interprète des instructions naturelles (changer prix/quantité/unité/TVA, ajouter/supprimer une ligne) et affiche les modifications proposées AVANT application — jamais de modification silencieuse.
+- ✅ Validation vocale sécurisée : « valide », « c'est bon », « enregistre », « envoie » ouvrent uniquement une étape de confirmation ; confirmation explicite à l'écran requise avant enregistrement/renvoi.
+- ✅ TVA : une ligne « À définir » (null) n'est jamais traitée comme 0 % ; envoi définitif ET PDF final bloqués tant que la TVA n'est pas fixée (message « Vérifiez et définissez la TVA avant d'envoyer le devis »), garde côté serveur (pdf, send-email, status envoye) + côté UI.
+- ✅ Email : bouton « Voir et accepter le devis en ligne » (au lieu de « signer »).
+- ✅ Tests : 100% des fonctions modifiées (backend 6/6, frontend 4/4).
+
 ## Implémenté (2026-09-01) — Itération 3
 - ✅ PDF professionnel (reportlab) : bouton « Télécharger le PDF », rendu imprimable (entreprise, client, N°/date, lignes, qté, prix, TVA, totaux, mentions légales, statut) aux couleurs pétrole/lagon. Endpoint GET /api/quotes/{id}/pdf.
 - ✅ Envoi email réel (Resend managé Emergent) avec PDF joint : prévisualisation (destinataire + objet en lecture seule, message modifiable), délai de relance (J+5/7/10) ; mode démonstration si non configuré. Respect des guardrails (recipient/objet/HTML côté serveur, message échappé).

@@ -208,6 +208,13 @@ def compute_totals(lignes: List[dict]) -> dict:
     return {"total_ht": total_ht, "total_tva": total_tva, "total_ttc": round(total_ht + total_tva, 2)}
 
 
+TVA_UNDEFINED_MSG = "Vérifiez et définissez la TVA avant d'envoyer le devis."
+
+
+def has_undefined_tva(lignes: List[dict]) -> bool:
+    return any(l.get("tva") in (None, "") for l in lignes)
+
+
 def effective_status(doc: dict) -> str:
     s = doc.get("statut")
     if s in ("envoye", "relance"):
@@ -447,6 +454,8 @@ async def set_status(quote_id: str, body: StatusUpdate):
     company = await get_company()
     update = {"statut": body.statut, "updated_at": now_iso()}
     if body.statut == "envoye":
+        if has_undefined_tva(doc.get("lignes", [])):
+            raise HTTPException(status_code=400, detail=TVA_UNDEFINED_MSG)
         delay = body.relance_delay_days or company.get("relance_delay_days", 7)
         update["sent_at"] = doc.get("sent_at") or now_iso()
         update["relance_delay_days"] = delay
@@ -924,7 +933,7 @@ def build_email_html(message: str, quote: dict, company: dict, link: Optional[st
         button = (f'<tr><td style="padding:18px 0"><a href="{escape(link)}" '
                   f'style="background:#00A896;color:#ffffff;padding:13px 24px;border-radius:10px;'
                   f'text-decoration:none;font-weight:bold;display:inline-block;font-size:14px">'
-                  f'Voir et signer le devis en ligne</a></td></tr>')
+                  f'Voir et accepter le devis en ligne</a></td></tr>')
     name = escape(company.get('name', ''))
     return (
         f'<table role="presentation" width="100%" style="max-width:600px;margin:0 auto;'
@@ -973,6 +982,8 @@ async def quote_pdf(quote_id: str):
     doc = await db.quotes.find_one({"id": quote_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Devis introuvable")
+    if has_undefined_tva(doc.get("lignes", [])):
+        raise HTTPException(status_code=400, detail=TVA_UNDEFINED_MSG)
     company = await get_company()
     pdf = build_pdf(serialize_quote(doc), company)
     return Response(content=pdf, media_type="application/pdf",
@@ -1006,6 +1017,8 @@ async def send_quote_email(quote_id: str, req: SendEmailRequest):
     to = (q.get("client", {}) or {}).get("email", "")
     if not to:
         raise HTTPException(status_code=400, detail="Aucune adresse email client renseignée")
+    if has_undefined_tva(doc.get("lignes", [])):
+        raise HTTPException(status_code=400, detail=TVA_UNDEFINED_MSG)
 
     token = await ensure_public_token(quote_id)
     base = safe_base_url(req.app_base_url)
@@ -1080,6 +1093,94 @@ async def public_refuse(token: str, req: RefuseRequest):
             "decision_source": "client", "updated_at": now_iso(),
         }})
     return {"statut": "refuse"}
+
+
+class DispatchRequest(BaseModel):
+    questions: List[str]
+    transcript: str
+
+
+class VoiceEditRequest(BaseModel):
+    lignes: List[QuoteLine]
+    transcript: str
+
+
+async def _llm_json(system: str, prompt: str) -> dict:
+    chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"voice-{uuid.uuid4()}",
+                   system_message=system).with_model("openai", "gpt-5.4")
+    resp = await chat.send_message(UserMessage(text=prompt))
+    return _extract_json(resp)
+
+
+@api_router.post("/dispatch-answers")
+async def dispatch_answers(req: DispatchRequest):
+    if not req.transcript.strip() or not req.questions:
+        return {"answers": {}}
+    system = (
+        "Tu reçois une liste de questions numérotées et une dictée libre en français. "
+        "Répartis les informations de la dictée dans la bonne question. "
+        "Ne réponds pas toi-même aux questions: extrais uniquement ce que dit l'utilisateur. "
+        "Laisse une chaîne vide si l'information n'est pas fournie. "
+        'Réponds UNIQUEMENT en JSON: {"answers": {"0": "texte", "1": ""}}'
+    )
+    qs = "\n".join(f"{i}. {q}" for i, q in enumerate(req.questions))
+    prompt = f"Questions:\n{qs}\n\nDictée:\n{req.transcript}"
+    try:
+        data = await _llm_json(system, prompt)
+    except Exception as e:
+        logger.exception("dispatch failed")
+        raise HTTPException(status_code=500, detail=f"Répartition impossible: {e}")
+    ans = data.get("answers", {}) or {}
+    return {"answers": {str(k): str(v) for k, v in ans.items()}}
+
+
+@api_router.post("/edit-voice")
+async def edit_voice(req: VoiceEditRequest):
+    if not req.transcript.strip():
+        raise HTTPException(status_code=400, detail="Instruction vide")
+    current = [l.model_dump() for l in req.lignes]
+    system = (
+        "Tu modifies un devis d'artisan selon une instruction orale en français. "
+        "On te donne les lignes actuelles (JSON, chacune avec un id) et l'instruction.\n"
+        "Détermine l'intention: 'confirm' si l'utilisateur demande SEULEMENT de valider/enregistrer/"
+        "envoyer (ex: 'valide', 'c'est bon', 'enregistre', 'envoie', 'renvoie'), sinon 'edit'.\n"
+        "Pour 'edit': renvoie TOUTES les lignes mises à jour en conservant les id existants, sans "
+        "toucher aux lignes non concernées. Actions: modifier prix_unitaire_ht, quantite, unite, tva; "
+        "ajouter une ligne (id vide, source 'manuel'); supprimer une ligne. Pour un ajout dont le "
+        "contexte TVA est inconnu, mets tva=null. Ne modifie jamais une ligne sans raison explicite.\n"
+        "Décris chaque changement dans 'changes' (français clair, ex: 'Peinture: 12,50 € -> 15,00 €/m²').\n"
+        'Réponds UNIQUEMENT en JSON: {"intent":"edit"|"confirm","confirm_action":"save"|"send"|null,'
+        '"changes":["..."],"lignes":[{"id":str,"designation":str,"quantite":number,"unite":str,'
+        '"prix_unitaire_ht":number,"tva":number|null,"source":str,"catalog_code":str|null}],"summary":str}'
+    )
+    prompt = f"Lignes actuelles:\n{json.dumps(current, ensure_ascii=False)}\n\nInstruction:\n{req.transcript}"
+    try:
+        data = await _llm_json(system, prompt)
+    except Exception as e:
+        logger.exception("edit-voice failed")
+        raise HTTPException(status_code=500, detail=f"Interprétation impossible: {e}")
+    intent = data.get("intent", "edit")
+    if intent == "confirm":
+        return {"intent": "confirm", "confirm_action": data.get("confirm_action") or "save",
+                "changes": [], "lignes": current, "summary": data.get("summary", ""),
+                "totaux": compute_totals(current)}
+    out = []
+    for l in data.get("lignes", current):
+        tva = l.get("tva", None)
+        out.append(QuoteLine(
+            id=l.get("id") or str(uuid.uuid4()),
+            designation=str(l.get("designation", "")),
+            quantite=float(l.get("quantite", 1) or 1),
+            unite=str(l.get("unite", "u")),
+            prix_unitaire_ht=float(l.get("prix_unitaire_ht", 0) or 0),
+            tva=(None if tva in (None, "", "null") else float(tva)),
+            source=str(l.get("source", "manuel")),
+            catalog_code=l.get("catalog_code") or None,
+        ).model_dump())
+    return {"intent": "edit", "confirm_action": None,
+            "changes": [str(c) for c in data.get("changes", [])],
+            "lignes": out, "summary": data.get("summary", ""),
+            "totaux": compute_totals(out)}
 
 
 app.include_router(api_router)

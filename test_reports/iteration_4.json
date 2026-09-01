@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 4 fully tested — 6/6 new backend tests pass and all 4 targeted frontend flows pass. Backend (pytest /app/backend/tests/test_iter4.py): (1) POST /api/dispatch-answers with 3 questions and transcript 'les murs font 57 m², 4 fissures, on ne peint pas le plafond' distributes correctly into answers['0']='57...', ['1']='4...', ['2'] contains a negative ('non/pas/aucun') — the LLM extracts values without answering itself. (2) POST /api/edit-voice 'Passe la peinture à 15 euros le mètre carré et ajoute 50 euros de déplacement' returns intent='edit', changes list, updated lignes with existing L1 id preserved and prix_unitaire_ht=15, plus a new Déplacement line at 50€ with tva=null and source manuel; totaux recomputed. (3) 'supprime la ligne plinthes' removes only that line (intent=edit). (4) 'c\\'est bon valide le devis' returns intent='confirm', confirm_action in (save|send), lignes unchanged. (5) TVA guard: on a quote with tva=null, GET /pdf, POST /send-email and POST /status{envoye} all return HTTP 400 with detail 'Vérifiez et définissez la TVA avant d\\'envoyer le devis.'; after PUT setting tva=20, /pdf returns %PDF bytes and /status envoye succeeds. (6) build_email_html renders 'Voir et accepter le devis en ligne' (no 'signer'); real POST /send-email to delivered@resend.dev returns mode='live', sent=true.\n\nFrontend (Playwright, 390x844): opened /nouveau -> step1-next -> example description -> analyze-button; ai-questions panel appeared with 4 answer-i inputs (per-field answer-mic-i buttons were rendered — SpeechRecognition surfaced in this preview Chromium, which is the expected graceful path); typed text answers and submit-answers-button reached step 3 with voice-edit-button. voice-edit-modal opens; typing 'Passe la peinture à 15 euros le mètre carré' + interpret-button shows proposal-view with proposal-change-0; apply-proposal-btn closes modal (changes applied). Reopening the modal and interpreting 'valide le devis' opens save-confirm-modal (NOT saving directly) — proves the explicit on-screen confirmation. QuoteDetail on a null-TVA quote created via API shows tva-warning; download-pdf-button renders as a <button> (not <a>) so clicking it does not open the PDF and the send-quote-button click does not open email-modal nor send-modal, matching the TVA guard requirement.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      { "screen": "LineEditor TVA <select>", "issues": ["React hydration warning: '<span> cannot be a child of <option>' — the injected x-* debug span inside <option value=5.5> triggers a hydration console error. Purely cosmetic / dev tooling side-effect, but noisy in console."] }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter4.py",
+    "/app/test_reports/pytest/iter4_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Silence the <option><span/></option> hydration warning coming from x-* debug spans injected by the tooling.",
+    "(Carry-over from iter3) server.py is 1200 lines — split into routers/{quotes,pdf,email,public,voice}.py before growing further."
+  ],
+  "critical_code_review_comments": [
+    "server.py grew to 1200 lines (was 1099 in iter3). Add /voice endpoints (dispatch-answers, edit-voice) push it further past the 700-line split threshold.",
+    "edit_voice() LLM prompt is well-guarded: it explicitly asks the model to preserve line ids, only touch lines with an explicit reason, and mark tva=null when the added line's TVA context is unknown — this matched behaviour in tests.",
+    "TVA guard is enforced in three places (/quotes/{id}/pdf, /quotes/{id}/send-email, /quotes/{id}/status when status=='envoye') using the shared has_undefined_tva() helper and TVA_UNDEFINED_MSG constant. Good centralization.",
+    "Frontend QuoteDetail.openSend() also does a client-side TVA check with a toast — duplicated with server 400 check, which is fine (defense in depth) but the string literal is duplicated; consider exporting from a shared const.",
+    "dispatch_answers() casts values to str including empty strings — good, prevents accidental None injection in the answers dict.",
+    "edit_voice() falls back to `data.get('lignes', current)` if the LLM omits 'lignes' when intent='edit' — this preserves user data on malformed LLM output. Good defensive default."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter4.py"
+  ],
+  "success_rate": { "backend": "100% (6/6)", "frontend": "100% (4/4 flows)" },
+  "test_credentials": "No auth. EMERGENT_EMAIL_KEY set; real send used delivered@resend.dev (Resend sink).",
+  "seed_data_creation": "POST /api/seed at test start and end. One ephemeral TEST quote created via /api/quotes with tva=null to exercise the TVA guard, then reseeded.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter4 tests at /app/backend/tests/test_iter4.py (6 tests, ~10s, real LLM+email). Combined suite: backend_test.py (iter1/2) + test_iter3.py + test_iter4.py. In this preview Chromium SpeechRecognition IS defined so mic buttons render (opposite of the review-request assumption); the text-fallback paths were still exercised. All 5 iteration-4 requirements verified end-to-end.",
+  "rca of the issue": "N/A — no failures."
+}

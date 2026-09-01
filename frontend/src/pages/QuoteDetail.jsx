@@ -46,6 +46,10 @@ export default function QuoteDetail() {
   };
 
   const openSend = async () => {
+    if ((q?.lignes || []).some((l) => l.tva === null || l.tva === undefined || l.tva === "")) {
+      toast.error("Vérifiez et définissez la TVA avant d'envoyer le devis.");
+      return;
+    }
     setDelay(company?.relance_delay_days || 7);
     try {
       const p = await api.emailPreview(id);
@@ -107,6 +111,7 @@ export default function QuoteDetail() {
   const isSent = ["envoye", "relance", "a_relancer"].includes(eff);
   const editable = q.statut !== "accepte" && q.statut !== "refuse";
   const clientLink = q.public_token ? `${window.location.origin}/devis-client/${q.public_token}` : null;
+  const needsTva = (q.lignes || []).some((l) => l.tva === null || l.tva === undefined || l.tva === "");
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 animate-float-in">
@@ -144,6 +149,17 @@ export default function QuoteDetail() {
               <Copy size={13} /> Copier
             </button>
           </div>
+        </div>
+      )}
+
+      {needsTva && (
+        <div data-testid="tva-warning" className="rounded-xl border border-amber-relance/40 bg-amber-bg px-4 py-3 text-sm font-semibold text-amber-relance">
+          Vérifiez et définissez la TVA avant d'envoyer le devis.
+          {editable && (
+            <button data-testid="tva-warning-edit" onClick={() => navigate(`/nouveau?edit=${q.id}`)} className="ml-2 underline">
+              Modifier
+            </button>
+          )}
         </div>
       )}
 
@@ -218,10 +234,18 @@ export default function QuoteDetail() {
       </div>
 
       {/* PDF download */}
-      <a data-testid="download-pdf-button" href={api.pdfUrl(q.id)} target="_blank" rel="noreferrer"
-        className="flex items-center justify-center gap-2 rounded-2xl border border-petrol/20 bg-card py-3.5 text-base font-bold text-petrol shadow-card transition-transform active:scale-95">
-        <FileDown size={18} /> Télécharger le PDF
-      </a>
+      {needsTva ? (
+        <button data-testid="download-pdf-button"
+          onClick={() => toast.error("Vérifiez et définissez la TVA avant d'envoyer le devis.")}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-petrol/15 bg-secondary/60 py-3.5 text-base font-bold text-muted-foreground">
+          <FileDown size={18} /> Télécharger le PDF
+        </button>
+      ) : (
+        <a data-testid="download-pdf-button" href={api.pdfUrl(q.id)} target="_blank" rel="noreferrer"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-petrol/20 bg-card py-3.5 text-base font-bold text-petrol shadow-card transition-transform active:scale-95">
+          <FileDown size={18} /> Télécharger le PDF
+        </a>
+      )}
 
       {/* Actions */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
