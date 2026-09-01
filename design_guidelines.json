@@ -1,0 +1,101 @@
+{
+  "project_name": "SOCLE Artisan – Assistant Devis IA",
+  "app_type": "mobile_web_app / saas_app (hybrid, mobile-first)",
+  "language": "French (fr-FR)",
+  "fictional_artisan": {
+    "name": "Martin Rénovation",
+    "artisan_name": "Martin Dubois",
+    "siret": "849 204 112 00018",
+    "address": "14 Rue des Artisans, 69003 Lyon",
+    "phone": "06 12 34 56 78",
+    "email": "contact@martin-renovation.fr",
+    "assurance": "MAAF Décennale N° 98234102-B"
+  },
+  "theme": {
+    "palette": {
+      "primary_petrol": "#0F2D3A",
+      "primary_petrol_hover": "#163E50",
+      "lagoon_teal": "#00A896",
+      "lagoon_light": "#E0F2FE",
+      "lagoon_glow": "#028090",
+      "amber_relance": "#D97706",
+      "amber_bg": "#FEF3C7",
+      "emerald_accepted": "#059669",
+      "emerald_bg": "#D1FAE5",
+      "slate_draft": "#64748B",
+      "slate_bg": "#F1F5F9",
+      "background": "#F8FAFC",
+      "card_bg": "#FFFFFF",
+      "text_main": "#0F172A",
+      "text_muted": "#475569"
+    },
+    "border_radius": "0.75rem (rounded-xl) for cards, 1rem (rounded-2xl) for primary buttons and modals",
+    "shadows": {
+      "card": "0 2px 8px -2px rgba(15, 45, 58, 0.08), 0 1px 3px 0 rgba(15, 45, 58, 0.04)",
+      "floating_cta": "0 10px 25px -5px rgba(0, 168, 150, 0.4), 0 8px 10px -6px rgba(0, 168, 150, 0.2)",
+      "active_card": "0 8px 20px -4px rgba(15, 45, 58, 0.12)"
+    }
+  },
+  "typography": {
+    "heading_font": "Plus Jakarta Sans, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "scale": {
+      "h1_hero": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h2_section": "text-xl sm:text-2xl font-bold tracking-tight",
+      "h3_card": "text-lg font-semibold",
+      "body_lg": "text-base font-medium",
+      "body": "text-sm font-normal",
+      "caption": "text-xs font-medium uppercase tracking-wider"
+    }
+  },
+  "layout_and_navigation": {
+    "mobile_first": true,
+    "container_max_width": "max-w-md mx-auto sm:max-w-2xl lg:max-w-5xl",
+    "navigation": {
+      "top_bar": "Sticky header with logo SOCLE Artisan, badge 'Martin Rénovation', quick stats summary, data-testid='top-nav'",
+      "mobile_bottom_bar": "Fixed bottom bar on mobile with 4 tactile tabs: Tableau de bord, Devis, Nouveau IA (+ highlight), Clients",
+      "desktop_sidebar": "Responsive side panel on desktop"
+    }
+  },
+  "key_features_and_screens": {
+    "dashboard": {
+      "hero_section": "Card 'À traiter aujourd'hui' highlighting quotes requiring immediate action or follow-up",
+      "metrics": [
+        "Devis à relancer (number & total €)",
+        "CA potentiel en attente (€)",
+        "Devis acceptés ce mois (€)",
+        "Temps moyen gagné (ex: 3h40 cette semaine)"
+      ],
+      "quick_cta": "Big tactile button 'Nouveau devis IA' with mic icon and pulse effect"
+    },
+    "new_quote_ia_wizard": {
+      "step_1_client": "Form fields for Client info (Nom, Téléphone, Email, Adresse du chantier) with quick pre-fill mock client button",
+      "step_2_description_and_mic": "Large high-contrast textarea 'Décrivez le chantier' + prominent Micro dictation button with live animated waveform simulator",
+      "step_3_ai_analyzer": "Button 'Analyser avec l'IA' with simulated multi-step AI parsing progress (extracting prestations, quantities, TVA rates)",
+      "step_4_line_editor": "Structured line items table with editable Designation, Quantité, Unité (m², h, forfait, ens.), Prix Unitaire HT, and TVA dropdown (5.5%, 10%, 20%)",
+      "totals_box": "Instant reactive calculation box showing Total HT, Total TVA, and Total TTC"
+    },
+    "quote_preview": {
+      "document_style": "Professional printable French quote sheet format with SIRET, Legal mentions, Client box, itemized table, total summary, signature block",
+      "actions": "Buttons for Enregistrer, Imprimer/PDF, Envoyer par SMS/Email, Marquer Accepté"
+    },
+    "relance_modal": {
+      "trigger": "Button 'Relancer le client'",
+      "content": "Pre-filled polite SMS/Email message template with client name, quote reference, amount, and direct approval link simulation"
+    }
+  },
+  "component_guidelines": {
+    "buttons": "Large touch target (minimum 48px height, default 52px), rounded-xl, bold label, clear icon",
+    "inputs": "Height 48px, high contrast borders, clear labels and placeholder examples suitable for field tradespeople",
+    "cards": "Clean white background with soft petrol tint border, generous internal padding (p-4 to p-6)",
+    "status_badges": "High visibility pill badges for Brouillon, Envoyé, À relancer, Accepté"
+  },
+  "image_urls": {
+    "artisan_avatar": "https://images.unsplash.com/photo-1606462471470-e62753e2cfaf?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "jobsite_1": "https://images.unsplash.com/photo-1768321917047-6029570b9ea0?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "jobsite_2": "https://images.unsplash.com/photo-1560184984-40825b480203?crop=entropy&cs=srgb&fm=jpg&q=85"
+  },
+  "testing": {
+    "requirement": "All interactive elements, buttons, inputs, tabs, status pills, and calculated totals MUST include data-testid attributes (e.g., data-testid='new-quote-button', data-testid='total-ttc-display')."
+  }
+}
