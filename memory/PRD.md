@@ -18,6 +18,10 @@ Application web responsive en français permettant à un artisan de transformer 
 - Prévisualisation devis pro (coordonnées, numéro, date, client, tableau, totaux, mentions légales).
 - Statuts Brouillon/Envoyé/À relancer/Accepté + actions Enregistrer/Envoyer/Marquer accepté/Relancer (message prérempli modifiable).
 
+## Implémenté (2026-09-01) — Itération 7
+- ✅ Reconnaissance vocale gérée par Emergent (OpenAI whisper-1) : endpoint POST /api/transcribe (audio → texte français). Le hook `useDictation` utilise l'API Web Speech du navigateur si disponible, sinon bascule automatiquement sur un enregistrement micro (MediaRecorder) transcrit côté serveur par Whisper. Garde 25 Mo max.
+- ✅ La dictée fonctionne donc aussi sur les navigateurs sans reconnaissance vocale intégrée. Tests 100% (backend 10/10, frontend), aucune régression.
+
 ## Implémenté (2026-09-01) — Itération 6
 - ✅ UX des actions vocales unifiée : suppression des petits micros par champ ; un seul gros bouton micro central en bas de l'écran (style bouton principal), action vocale principale de l'écran courant : client → renseigner le client à la voix ; questions IA → répondre aux précisions ; lignes → modifier le devis à la voix.
 - ✅ Saisie clavier conservée dans tous les champs. Aucun autre changement (PDF, email, lien client, TVA, relances, statuts, données, design). Tests frontend 100%, sans régression.

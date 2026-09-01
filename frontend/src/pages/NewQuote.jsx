@@ -86,14 +86,13 @@ export default function NewQuote() {
 
   const wasSent = editStatut && editStatut !== "brouillon";
 
-  const toggleMic = (target, { base = "", onLive, onStop } = {}) => {
+  const toggleMic = (target, { base = "", onLive, onDone } = {}) => {
     if (dict.listening && micTarget === target) {
-      const txt = dict.stop();
+      dict.stop();
       setMicTarget(null);
-      onStop && onStop(txt);
-    } else if (!dict.listening) {
+    } else if (!dict.listening && !dict.transcribing) {
       setMicTarget(target);
-      dict.start(base, onLive);
+      dict.start(base, onLive, onDone);
     } else {
       dict.stop();
       setMicTarget(null);
@@ -236,19 +235,19 @@ export default function NewQuote() {
     if (step === 1)
       return {
         show: dict.supported, label: "Renseigner le client à la voix", target: "client-global",
-        onClick: () => toggleMic("client-global", { base: "", onLive: setClientTranscript, onStop: parseClientVoice }),
+        onClick: () => toggleMic("client-global", { base: "", onLive: setClientTranscript, onDone: parseClientVoice }),
         status: parsingClient ? "Extraction des informations…" : (micTarget === "client-global" ? clientTranscript : ""),
       };
     if (step === 2 && questions.length === 0)
       return {
         show: dict.supported, label: "Dicter la description", target: "description",
-        onClick: () => toggleMic("description", { base: description, onLive: setDescription }),
+        onClick: () => toggleMic("description", { base: description, onLive: setDescription, onDone: setDescription }),
         status: micTarget === "description" && dict.listening ? (description || "…") : "",
       };
     if (step === 2)
       return {
         show: dict.supported, label: "Répondre aux précisions à la voix", target: "answers-global",
-        onClick: () => toggleMic("answers-global", { base: "", onLive: setGlobalAns, onStop: dispatchVoice }),
+        onClick: () => toggleMic("answers-global", { base: "", onLive: setGlobalAns, onDone: dispatchVoice }),
         status: dispatching ? "Répartition en cours…" : (micTarget === "answers-global" ? globalAns : ""),
       };
     if (step === 3)
@@ -260,6 +259,7 @@ export default function NewQuote() {
     const vc = voiceConfig();
     if (!vc.show) return null;
     const active = dict.listening && micTarget === vc.target;
+    const busy = dict.transcribing;
     return (
       <div className="pt-1">
         {vc.status ? (
@@ -267,12 +267,15 @@ export default function NewQuote() {
             {(dispatching || parsingClient) && <Loader2 className="animate-spin" size={12} />} « {vc.status} »
           </p>
         ) : null}
-        <button data-testid="voice-primary-button" onClick={vc.onClick}
-          className={`flex w-full items-center justify-center gap-2.5 rounded-2xl py-4 text-base font-bold text-white shadow-cta transition-transform active:scale-95 ${
+        <button data-testid="voice-primary-button" onClick={vc.onClick} disabled={busy}
+          className={`flex w-full items-center justify-center gap-2.5 rounded-2xl py-4 text-base font-bold text-white shadow-cta transition-transform active:scale-95 disabled:opacity-70 ${
             active ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
-          {active ? <MicOff size={20} /> : <Mic size={20} />}
-          {active ? "Arrêter la dictée" : vc.label}
+          {busy ? <Loader2 className="animate-spin" size={20} /> : active ? <MicOff size={20} /> : <Mic size={20} />}
+          {busy ? "Transcription…" : active ? "Arrêter la dictée" : vc.label}
         </button>
+        {dict.mode === "whisper" && !active && !busy && (
+          <p className="mt-1 text-center text-[11px] text-muted-foreground">Transcription vocale par IA</p>
+        )}
       </div>
     );
   };
@@ -484,7 +487,7 @@ export default function NewQuote() {
                   className="min-h-[110px] resize-none border-0 text-sm focus-visible:ring-0" />
                 {dict.supported && (
                   <button data-testid="voice-edit-mic"
-                    onClick={() => toggleMic("voice-edit", { base: instruction, onLive: setInstruction })}
+                    onClick={() => toggleMic("voice-edit", { base: instruction, onLive: setInstruction, onDone: setInstruction })}
                     className={`absolute bottom-2 right-2 flex h-10 w-10 items-center justify-center rounded-xl text-white ${
                       dict.listening && micTarget === "voice-edit" ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
                     {dict.listening && micTarget === "voice-edit" ? <MicOff size={17} /> : <Mic size={17} />}

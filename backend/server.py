@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -13,10 +13,12 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.llm.openai import OpenAISpeechToText
 
 import io
 import base64
 import secrets
+import tempfile
 import ipaddress
 import httpx
 from html import escape
@@ -1220,6 +1222,31 @@ async def parse_client(req: ParseClientRequest):
         "telephone": str(data.get("telephone", "")).strip(),
         "email": normalize_email(str(data.get("email", ""))),
     }
+
+
+@api_router.post("/transcribe")
+async def transcribe(file: UploadFile = File(...)):
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Audio vide")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Fichier audio trop volumineux (max 25 Mo)")
+    suffix = os.path.splitext(file.filename or "")[1] or ".webm"
+    stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        with open(tmp_path, "rb") as f:
+            resp = await stt.transcribe(file=f, model="whisper-1", response_format="json", language="fr")
+    except Exception as e:
+        logger.exception("transcription failed")
+        raise HTTPException(status_code=500, detail=f"Transcription impossible: {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+    return {"text": getattr(resp, "text", "") or ""}
 
 
 app.include_router(api_router)
