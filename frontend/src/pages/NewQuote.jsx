@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Mic, MicOff, Sparkles, ArrowRight, ArrowLeft, User, Loader2, Wand2, Save,
-  HelpCircle, Info, Send, Volume2, ListChecks, Check, X,
+  HelpCircle, Info, Send, ListChecks, Check, X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,18 +56,18 @@ export default function NewQuote() {
   const [answers, setAnswers] = useState({});
   const [globalAns, setGlobalAns] = useState("");
   const [dispatching, setDispatching] = useState(false);
+  const [clientTranscript, setClientTranscript] = useState("");
+  const [parsingClient, setParsingClient] = useState(false);
 
   // voice editing of the quote
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [instruction, setInstruction] = useState("");
   const [interpreting, setInterpreting] = useState(false);
-  const [proposal, setProposal] = useState(null); // {changes, lignes, summary, totaux}
-  const [saveConfirm, setSaveConfirm] = useState(null); // {action:'save'|'send'}
+  const [proposal, setProposal] = useState(null);
+  const [saveConfirm, setSaveConfirm] = useState(null);
 
   const dict = useDictation();
   const [micTarget, setMicTarget] = useState(null);
-  const [clientTranscript, setClientTranscript] = useState("");
-  const [parsingClient, setParsingClient] = useState(false);
 
   const { data: editQuote } = useQuery({
     queryKey: ["quote", editId],
@@ -95,7 +95,6 @@ export default function NewQuote() {
       setMicTarget(target);
       dict.start(base, onLive);
     } else {
-      // switching target: stop current first
       dict.stop();
       setMicTarget(null);
     }
@@ -119,18 +118,6 @@ export default function NewQuote() {
       setClientTranscript("");
       setParsingClient(false);
     }
-  };
-
-  const MicField = ({ target, testid, opts }) => {
-    if (!dict.supported) return null;
-    const active = dict.listening && micTarget === target;
-    return (
-      <button type="button" data-testid={testid} onClick={() => toggleMic(target, opts)}
-        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white transition-transform active:scale-95 ${
-          active ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
-        {active ? <MicOff size={18} /> : <Mic size={18} />}
-      </button>
-    );
   };
 
   const callAnalyze = async (answersText) => {
@@ -237,12 +224,57 @@ export default function NewQuote() {
       }
       navigate(`/devis/${quote.id}`);
     } catch (e) {
-      const msg = e?.response?.data?.detail || "Enregistrement impossible";
-      toast.error(msg);
+      toast.error(e?.response?.data?.detail || "Enregistrement impossible");
     } finally {
       setSaving(false);
       setSaveConfirm(null);
     }
+  };
+
+  // Single primary voice action for the current screen
+  const voiceConfig = () => {
+    if (step === 1)
+      return {
+        show: dict.supported, label: "Renseigner le client à la voix", target: "client-global",
+        onClick: () => toggleMic("client-global", { base: "", onLive: setClientTranscript, onStop: parseClientVoice }),
+        status: parsingClient ? "Extraction des informations…" : (micTarget === "client-global" ? clientTranscript : ""),
+      };
+    if (step === 2 && questions.length === 0)
+      return {
+        show: dict.supported, label: "Dicter la description", target: "description",
+        onClick: () => toggleMic("description", { base: description, onLive: setDescription }),
+        status: micTarget === "description" && dict.listening ? (description || "…") : "",
+      };
+    if (step === 2)
+      return {
+        show: dict.supported, label: "Répondre aux précisions à la voix", target: "answers-global",
+        onClick: () => toggleMic("answers-global", { base: "", onLive: setGlobalAns, onStop: dispatchVoice }),
+        status: dispatching ? "Répartition en cours…" : (micTarget === "answers-global" ? globalAns : ""),
+      };
+    if (step === 3)
+      return { show: true, label: "Modifier le devis à la voix", target: "open-edit", onClick: openVoiceEdit, status: "" };
+    return { show: false };
+  };
+
+  const VoiceBar = () => {
+    const vc = voiceConfig();
+    if (!vc.show) return null;
+    const active = dict.listening && micTarget === vc.target;
+    return (
+      <div className="pt-1">
+        {vc.status ? (
+          <p className="mb-2 flex items-center justify-center gap-1.5 text-xs italic text-lagoon-glow">
+            {(dispatching || parsingClient) && <Loader2 className="animate-spin" size={12} />} « {vc.status} »
+          </p>
+        ) : null}
+        <button data-testid="voice-primary-button" onClick={vc.onClick}
+          className={`flex w-full items-center justify-center gap-2.5 rounded-2xl py-4 text-base font-bold text-white shadow-cta transition-transform active:scale-95 ${
+            active ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
+          {active ? <MicOff size={20} /> : <Mic size={20} />}
+          {active ? "Arrêter la dictée" : vc.label}
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -270,71 +302,29 @@ export default function NewQuote() {
             <h1 className="font-heading text-2xl font-extrabold text-petrol">Informations client</h1>
             <p className="text-sm text-muted-foreground">Dictez ou saisissez les coordonnées du client.</p>
           </div>
-
-          {dict.supported && (
-            <div className="rounded-2xl border border-lagoon/30 bg-lagoon-light p-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-lagoon-glow">
-                <Volume2 size={16} /> Renseigner le client à la voix
-              </div>
-              <p className="mt-1 text-xs text-petrol/70">
-                Ex : « Client Jean Dupont, 12 rue Victor Hugo à Agen, téléphone 06 12 34 56 78, email jean point dupont arobase gmail point com ».
-              </p>
-              <button data-testid="voice-client-button"
-                onClick={() => toggleMic("client-global", { base: "", onLive: setClientTranscript, onStop: parseClientVoice })}
-                className={`mt-2 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-transform active:scale-95 ${
-                  dict.listening && micTarget === "client-global" ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
-                {dict.listening && micTarget === "client-global" ? <MicOff size={18} /> : <Mic size={18} />}
-                {dict.listening && micTarget === "client-global" ? "Arrêter la dictée" : "Renseigner le client à la voix"}
-              </button>
-              {dict.listening && micTarget === "client-global" && (
-                <p className="mt-2 text-xs italic text-petrol/70">« {clientTranscript || "…"} »</p>
-              )}
-              {parsingClient && (
-                <p className="mt-2 flex items-center gap-1.5 text-xs text-lagoon-glow"><Loader2 className="animate-spin" size={12} /> Extraction des informations…</p>
-              )}
-            </div>
-          )}
-
           <div className="space-y-3 rounded-2xl border border-petrol/10 bg-card p-4 shadow-card">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vérifiez et corrigez si besoin</div>
             <Field label="Nom / Raison sociale">
-              <div className="flex items-center gap-2">
-                <Input data-testid="client-nom-input" value={client.nom || ""}
-                  onChange={(e) => setClient({ ...client, nom: e.target.value })}
-                  placeholder="Ex : Mme Dubois" className="h-12" />
-                <MicField target="c-nom" testid="client-mic-nom"
-                  opts={{ base: client.nom || "", onLive: (t) => setClient((c) => ({ ...c, nom: t })) }} />
-              </div>
+              <Input data-testid="client-nom-input" value={client.nom || ""}
+                onChange={(e) => setClient({ ...client, nom: e.target.value })}
+                placeholder="Ex : Mme Dubois" className="h-12" />
             </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Téléphone">
-                <div className="flex items-center gap-2">
-                  <Input data-testid="client-tel-input" value={client.telephone || ""}
-                    onChange={(e) => setClient({ ...client, telephone: e.target.value })}
-                    placeholder="06 12 34 56 78" className="h-12" />
-                  <MicField target="c-tel" testid="client-mic-tel"
-                    opts={{ base: client.telephone || "", onLive: (t) => setClient((c) => ({ ...c, telephone: t })) }} />
-                </div>
+                <Input data-testid="client-tel-input" value={client.telephone || ""}
+                  onChange={(e) => setClient({ ...client, telephone: e.target.value })}
+                  placeholder="06 12 34 56 78" className="h-12" />
               </Field>
               <Field label="Email">
-                <div className="flex items-center gap-2">
-                  <Input data-testid="client-email-input" value={client.email || ""}
-                    onChange={(e) => setClient({ ...client, email: e.target.value })}
-                    placeholder="client@email.fr" className="h-12" />
-                  <MicField target="c-email" testid="client-mic-email"
-                    opts={{ base: client.email || "", onLive: (t) => setClient((c) => ({ ...c, email: normalizeEmailVoice(t) })) }} />
-                </div>
+                <Input data-testid="client-email-input" value={client.email || ""}
+                  onChange={(e) => setClient({ ...client, email: e.target.value })}
+                  placeholder="client@email.fr" className="h-12" />
                 <p className="mt-1 text-[11px] text-amber-relance">Vérifiez visuellement l'email dicté avant utilisation.</p>
               </Field>
             </div>
             <Field label="Adresse du chantier">
-              <div className="flex items-center gap-2">
-                <Input data-testid="client-adresse-input" value={client.adresse || ""}
-                  onChange={(e) => setClient({ ...client, adresse: e.target.value })}
-                  placeholder="Rue, code postal, ville" className="h-12" />
-                <MicField target="c-adresse" testid="client-mic-adresse"
-                  opts={{ base: client.adresse || "", onLive: (t) => setClient((c) => ({ ...c, adresse: t })) }} />
-              </div>
+              <Input data-testid="client-adresse-input" value={client.adresse || ""}
+                onChange={(e) => setClient({ ...client, adresse: e.target.value })}
+                placeholder="Rue, code postal, ville" className="h-12" />
             </Field>
             <button data-testid="prefill-client-btn"
               onClick={() => setClient({ nom: "Mme Dubois", telephone: "06 45 78 12 90", email: "c.dubois@email.fr", adresse: "8 Rue de la République, 47000 Agen" })}
@@ -342,6 +332,9 @@ export default function NewQuote() {
               <User size={14} /> Pré-remplir un client d'exemple
             </button>
           </div>
+
+          <VoiceBar />
+
           <button data-testid="step1-next-btn" onClick={() => setStep(2)}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-petrol py-4 text-base font-bold text-white shadow-active transition-transform active:scale-95">
             Continuer <ArrowRight size={18} />
@@ -349,7 +342,7 @@ export default function NewQuote() {
         </section>
       )}
 
-      {/* Step 2: Description + mic + questions */}
+      {/* Step 2: Description + questions */}
       {step === 2 && (
         <section className="space-y-4">
           <div>
@@ -366,23 +359,12 @@ export default function NewQuote() {
               <div className="flex items-center justify-between border-t border-petrol/10 pt-3">
                 <button data-testid="example-btn" onClick={() => setDescription(EXAMPLE)}
                   className="text-xs font-semibold text-lagoon-glow">Insérer l'exemple</button>
-                {dict.supported && (
-                  <button data-testid="mic-button"
-                    onClick={() => toggleMic("description", { base: description, onLive: setDescription })}
-                    className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition-transform active:scale-95 ${
-                      dict.listening && micTarget === "description" ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
-                    {dict.listening && micTarget === "description" ? <MicOff size={18} /> : <Mic size={18} />}
-                    {dict.listening && micTarget === "description" ? "Arrêter" : "Dicter"}
-                  </button>
+                {dict.listening && micTarget === "description" && (
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-destructive">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" /> Dictée en cours…
+                  </span>
                 )}
               </div>
-              {dict.listening && micTarget === "description" && (
-                <div data-testid="waveform" className="mt-3 flex h-8 items-center justify-center gap-1">
-                  {Array.from({ length: 22 }).map((_, i) => (
-                    <span key={i} className="wave-bar h-full w-1 rounded-full bg-lagoon" style={{ animationDelay: `${i * 0.06}s` }} />
-                  ))}
-                </div>
-              )}
             </div>
           ) : (
             <div data-testid="ai-questions" className="space-y-3 rounded-2xl border border-amber-relance/30 bg-amber-bg/40 p-4">
@@ -391,56 +373,16 @@ export default function NewQuote() {
               </div>
               <p className="text-xs text-muted-foreground">
                 L'IA ne devine pas les données manquantes (ex : surface des murs ≠ surface au sol).
+                Répondez au clavier ou utilisez le bouton micro ci-dessous.
               </p>
-
-              {/* Global voice answer */}
-              {dict.supported && (
-                <div className="rounded-xl border border-lagoon/30 bg-lagoon-light p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-lagoon-glow">
-                      <Volume2 size={16} /> Répondez à toutes les questions à la voix
-                    </div>
-                    <button data-testid="global-voice-answers-btn"
-                      onClick={() => toggleMic("global", { base: "", onLive: setGlobalAns, onStop: dispatchVoice })}
-                      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white transition-transform active:scale-95 ${
-                        dict.listening && micTarget === "global" ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
-                      {dict.listening && micTarget === "global" ? <MicOff size={16} /> : <Mic size={16} />}
-                      {dict.listening && micTarget === "global" ? "Arrêter" : "Répondre à la voix"}
-                    </button>
-                  </div>
-                  {(dict.listening && micTarget === "global") && (
-                    <p className="mt-2 text-xs italic text-petrol/70">« {globalAns || "…"} »</p>
-                  )}
-                  {dispatching && (
-                    <p className="mt-2 flex items-center gap-1.5 text-xs text-lagoon-glow"><Loader2 className="animate-spin" size={12} /> Répartition en cours…</p>
-                  )}
+              {questions.map((q, i) => (
+                <div key={i} data-testid={`question-${i}`}>
+                  <label className="mb-1 block text-sm font-semibold text-petrol">{q}</label>
+                  <Input data-testid={`answer-${i}`} value={answers[i] || ""}
+                    onChange={(e) => setAnswers({ ...answers, [i]: e.target.value })}
+                    placeholder="Votre réponse (saisie ou dictée)" className="h-11" />
                 </div>
-              )}
-
-              {questions.map((q, i) => {
-                const active = dict.listening && micTarget === `a${i}`;
-                return (
-                  <div key={i} data-testid={`question-${i}`}>
-                    <label className="mb-1 block text-sm font-semibold text-petrol">{q}</label>
-                    <div className="flex items-center gap-2">
-                      <Input data-testid={`answer-${i}`} value={answers[i] || ""}
-                        onChange={(e) => setAnswers({ ...answers, [i]: e.target.value })}
-                        placeholder="Votre réponse (saisie ou dictée)" className="h-11 flex-1" />
-                      {dict.supported && (
-                        <button data-testid={`answer-mic-${i}`}
-                          onClick={() => toggleMic(`a${i}`, { base: answers[i] || "", onLive: (t) => setAnswers((a) => ({ ...a, [i]: t })) })}
-                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white transition-transform active:scale-95 ${
-                            active ? "animate-mic-pulse bg-destructive" : "bg-lagoon"}`}>
-                          {active ? <MicOff size={17} /> : <Mic size={17} />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {!dict.supported && (
-                <p className="text-xs text-muted-foreground">Dictée non disponible sur ce navigateur — saisissez vos réponses.</p>
-              )}
+              ))}
               <button data-testid="back-to-description-btn" onClick={() => setQuestions([])}
                 className="text-xs font-semibold text-lagoon-glow">← Modifier la description</button>
             </div>
@@ -454,23 +396,26 @@ export default function NewQuote() {
               </div>
             </div>
           ) : (
-            <div className="flex gap-3">
-              <button data-testid="step2-back-btn" onClick={() => setStep(1)}
-                className="flex items-center justify-center gap-2 rounded-2xl border border-petrol/15 bg-card px-5 py-4 font-semibold text-petrol">
-                <ArrowLeft size={18} />
-              </button>
-              {questions.length === 0 ? (
-                <button data-testid="analyze-button" onClick={runAnalyze}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-lagoon py-4 text-base font-bold text-white shadow-cta transition-transform active:scale-95">
-                  <Wand2 size={20} /> Analyser avec l'IA
+            <>
+              <VoiceBar />
+              <div className="flex gap-3">
+                <button data-testid="step2-back-btn" onClick={() => setStep(1)}
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-petrol/15 bg-card px-5 py-4 font-semibold text-petrol">
+                  <ArrowLeft size={18} />
                 </button>
-              ) : (
-                <button data-testid="submit-answers-button" onClick={submitAnswers}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-lagoon py-4 text-base font-bold text-white shadow-cta transition-transform active:scale-95">
-                  <Sparkles size={20} /> Générer le devis
-                </button>
-              )}
-            </div>
+                {questions.length === 0 ? (
+                  <button data-testid="analyze-button" onClick={runAnalyze}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-petrol py-4 text-base font-bold text-white shadow-active transition-transform active:scale-95">
+                    <Wand2 size={20} /> Analyser avec l'IA
+                  </button>
+                ) : (
+                  <button data-testid="submit-answers-button" onClick={submitAnswers}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-petrol py-4 text-base font-bold text-white shadow-active transition-transform active:scale-95">
+                    <Sparkles size={20} /> Générer le devis
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </section>
       )}
@@ -478,15 +423,9 @@ export default function NewQuote() {
       {/* Step 3: Line editor */}
       {step === 3 && (
         <section className="space-y-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Sparkles size={20} className="text-lagoon" />
-              <h1 className="font-heading text-2xl font-extrabold text-petrol">Lignes du devis</h1>
-            </div>
-            <button data-testid="voice-edit-button" onClick={openVoiceEdit}
-              className="flex items-center gap-2 rounded-xl bg-petrol px-3 py-2 text-sm font-bold text-white shadow-active transition-transform active:scale-95">
-              <Mic size={16} /> Modifier à la voix
-            </button>
+          <div className="flex items-center gap-2">
+            <Sparkles size={20} className="text-lagoon" />
+            <h1 className="font-heading text-2xl font-extrabold text-petrol">Lignes du devis</h1>
           </div>
           <p className="-mt-3 text-sm text-muted-foreground">Toutes les lignes restent modifiables.</p>
 
@@ -502,6 +441,8 @@ export default function NewQuote() {
           )}
 
           <LineEditor lignes={lignes} setLignes={setLignes} />
+
+          <VoiceBar />
 
           <div className="flex flex-wrap gap-3">
             <button data-testid="step3-back-btn" onClick={() => setStep(2)}

@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 6 UX-only refactor of voice controls verified end-to-end on /nouveau. All three screens (client, description, questions, quote-lines) now show exactly ONE data-testid='voice-primary-button' with the correct French label, the OLD per-field mic testids (client-mic-*, answer-mic-*, description-mic) are absent, keyboard entry works in every field, and the Step 3 voice-primary-button opens the voice-edit-modal where text-fallback interpret -> proposal -> apply and 'valide' -> save-confirm-modal still work.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Step 3 LineEditor TVA select", "issues": ["Hydration warning in console: <span> cannot be a child of <option> (from x-ve-dynamic instrumentation on <option> tags in components/LineEditor.jsx TVA <select>). Not user-visible but pollutes console."]}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_6.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "NewQuote.jsx line 486: The voice-edit-modal still contains a data-testid='voice-edit-mic' inline mic button. This is inside the modal (not a per-field mic on the main screen), which is consistent with the spec (single primary mic opens the modal, then user dictates instruction). Kept as-is; flagged in case the intent was to remove ALL secondary mics.",
+    "Console hydration warning from LineEditor <option> nesting <span> instrumentation nodes — harmless but should be silenced."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "None (no auth).",
+  "seed_data_creation": "Called POST /api/seed at start (status 200).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Verified voice UX refactor: step1 label 'Renseigner le client à la voix', step2 desc 'Dicter la description', step2 questions 'Répondre aux précisions à la voix', step3 'Modifier le devis à la voix'. Voice primary button classes: 'flex w-full items-center justify-center gap-2.5 rounded-2xl py-4 text-base font-bold text-white shadow-cta ... bg-lagoon' — matches primary style. Backend was untouched this iteration and skipped. Full analyze->questions->submit-answers->step3 flow works with real EMERGENT_LLM_KEY (calls take ~15s). Voice-edit modal interpret -> proposal -> apply -> save-confirm all work with text fallback.",
+  "rca of the issue": "N/A — no issues found."
+}
