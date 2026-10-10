@@ -42,7 +42,7 @@ export const Layout = ({ children }) => {
   const tabs = [
     { key: "dash", label: "Accueil", icon: Home, to: "/", active: isHome },
     { key: "quotes", label: "Mon activité", icon: BarChart3, to: "/devis", active: path.startsWith("/devis") },
-    { key: "assistant", label: "Assistant", icon: Sparkles, to: "/nouveau", active: path.startsWith("/nouveau") },
+    { key: "assistant", label: "Assistant", icon: Sparkles, to: "/assistant", active: path.startsWith("/assistant") },
     { key: "settings", label: "Profil", icon: User, to: "/parametres", active: path.startsWith("/parametres") },
   ];
 

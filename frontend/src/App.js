@@ -9,6 +9,7 @@ import NewQuote from "@/pages/NewQuote";
 import QuoteDetail from "@/pages/QuoteDetail";
 import Settings from "@/pages/Settings";
 import PublicQuote from "@/pages/PublicQuote";
+import Assistant from "@/pages/Assistant";
 
 function AppShell() {
   return (
@@ -19,6 +20,7 @@ function AppShell() {
         <Route path="/nouveau" element={<NewQuote />} />
         <Route path="/devis/:id" element={<QuoteDetail />} />
         <Route path="/parametres" element={<Settings />} />
+        <Route path="/assistant" element={<Assistant />} />
       </Routes>
     </Layout>
   );
