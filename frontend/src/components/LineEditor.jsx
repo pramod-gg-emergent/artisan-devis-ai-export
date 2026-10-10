@@ -106,7 +106,7 @@ export const LineEditor = ({ lignes, setLignes }) => {
                   }`}
                 >
                   <option value="">À définir</option>
-                  {TVA_RATES.map((t) => <option key={t} value={String(t)}>{num(t)} %</option>)}
+                  {TVA_RATES.map((t) => <option key={t} value={String(t)}>{`${num(t)} %`}</option>)}
                 </select>
               </div>
               <div className="flex flex-col justify-end">

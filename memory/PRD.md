@@ -18,6 +18,11 @@ Application web responsive en français permettant à un artisan de transformer 
 - Prévisualisation devis pro (coordonnées, numéro, date, client, tableau, totaux, mentions légales).
 - Statuts Brouillon/Envoyé/À relancer/Accepté + actions Enregistrer/Envoyer/Marquer accepté/Relancer (message prérempli modifiable).
 
+## Refonte UI GONAXIS — Lot 3 Assistant (2026-10-10) — Itération 12
+- ✅ Page /assistant (nav « Assistant ») : conversation, historique de session (sessionStorage), champ fixé en bas, micro lumineux (useDictation inchangé), suggestions.
+- ✅ Intentions par règles (sans IA, `lib/assistant/intents.js`) + actions métier séparées (`lib/assistant/handlers.js`) réutilisant les API existantes : créer un devis (→ /nouveau pré-rempli), lister, rechercher (nom/numéro), devis à relancer, préparer une relance (brouillon via POST /relance, jamais envoyé), chiffres clés ; modules absents signalés « pas encore disponible ».
+- ✅ Aucune API/BDD modifiée. Tests frontend 100% + parcours complet création devis IA (devis de test supprimé).
+
 ## Refonte UI GONAXIS — Lot 2 (2026-10-10) — Itération 11
 - ✅ Thème sombre appliqué aux pages internes (Mon activité/Devis, Nouveau devis, Détail, Paramètres/Profil) via une couche CSS `html.theme-night` (variables shadcn + surcharges des anciens tokens petrol/lagon/statuts) ajoutée par Layout ; aucun composant métier, API ou logique modifié.
 - ✅ Badges de statut recolorés pour fond sombre ; dialogues/sélecteurs sombres et lisibles ; page publique /devis-client reste claire.
@@ -97,5 +102,4 @@ Demande : transformer progressivement l'app selon la maquette GONAXIS (thème bl
 - P2: Séquence de numérotation robuste (compteur dédié vs count_documents).
 
 ## Prochaines tâches
-- Lot 3 GONAXIS : page Assistant dédiée.
 - Relances email automatiques, import catalogue réel, carnet clients.

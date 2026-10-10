@@ -41,7 +41,7 @@ export default function Assistant() {
   const reset = () => setMsgs([WELCOME]);
 
   return (
-    <div data-testid="assistant-page" className="mx-auto max-w-3xl pb-28">
+    <div data-testid="assistant-page" className="mx-auto max-w-3xl pb-40">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="font-heading text-2xl font-extrabold text-white">Assistant</h1>
