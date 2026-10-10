@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Home, BarChart3, Plus, Sparkles, User, Bell } from "lucide-react";
@@ -34,6 +34,11 @@ export const Layout = ({ children }) => {
   const { data: stats } = useQuery({ queryKey: ["stats"], queryFn: api.stats });
   const alerts = stats?.a_relancer || 0;
 
+  useEffect(() => {
+    document.documentElement.classList.add("theme-night");
+    return () => document.documentElement.classList.remove("theme-night");
+  }, []);
+
   const tabs = [
     { key: "dash", label: "Accueil", icon: Home, to: "/", active: isHome },
     { key: "quotes", label: "Mon activité", icon: BarChart3, to: "/devis", active: path.startsWith("/devis") },
@@ -42,7 +47,7 @@ export const Layout = ({ children }) => {
   ];
 
   return (
-    <div className={cn("min-h-screen pb-28 sm:pb-10", isHome ? "bg-night-app" : "bg-background")}>
+    <div className={cn("min-h-screen pb-28 sm:pb-10", "bg-night-app")}>
       <header data-testid="top-nav" className="sticky top-0 z-30 border-b border-white/5 bg-night/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Brand onClick={() => navigate("/")} />
