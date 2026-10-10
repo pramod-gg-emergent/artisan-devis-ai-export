@@ -18,6 +18,14 @@ Application web responsive en français permettant à un artisan de transformer 
 - Prévisualisation devis pro (coordonnées, numéro, date, client, tableau, totaux, mentions légales).
 - Statuts Brouillon/Envoyé/À relancer/Accepté + actions Enregistrer/Envoyer/Marquer accepté/Relancer (message prérempli modifiable).
 
+## Refonte UI « SOCLE Artisan par GONAXIS » — Lot 1 (2026-10-10) — Itération 10
+Demande : transformer progressivement l'app selon la maquette GONAXIS (thème bleu nuit néon). Choix utilisateur : tuiles sans données = démo badge « Bientôt » ; prénom depuis Paramètres (artisan_name) ; page client publique reste claire.
+- ✅ Thème sombre (couleurs night/electric, glass-panel, glow) ; fond sombre sur l'Accueil, autres pages encore claires (Lot 2).
+- ✅ En-tête « SOCLE Artisan par GONAXIS » + cloche (point rouge si devis à relancer) + avatar initiales.
+- ✅ Navigation : Accueil, Mon activité (/devis), + central (/nouveau), Assistant (/nouveau provisoire), Profil (/parametres) ; desktop : nav haut + bouton + flottant.
+- ✅ Accueil : salutation, gros micro (useDictation inchangé → /nouveau avec description pré-remplie), champ de question, raccourcis IA, outils connectés, À faire aujourd'hui, actions rapides, chiffres clés (données réelles). Composants dans `components/home/`.
+- ✅ Tests frontend 100% (iteration_10).
+
 ## Correctif vocal (2026-09-01) — Itération 9 (useDictation.js uniquement)
 - ✅ Bug mobile résolu : le micro démarrait puis s'arrêtait aussitôt (Web Speech API). `useDictation.js` réécrit pour n'utiliser QUE getUserMedia + MediaRecorder + POST /api/transcribe (Whisper). Web Speech API totalement supprimée (mode toujours 'whisper').
 - ✅ Enregistrement actif jusqu'au clic explicite « Arrêter » ; aucun useEffect/cleanup/stale closure n'appelle stop() ; deps useCallback corrigées ([supported] / []).
@@ -84,4 +92,6 @@ Application web responsive en français permettant à un artisan de transformer 
 - P2: Séquence de numérotation robuste (compteur dédié vs count_documents).
 
 ## Prochaines tâches
-- Export PDF, envoi email, carnet clients.
+- Lot 2 GONAXIS : habillage sombre de Devis, Nouveau devis, Détail, Paramètres (sans toucher la logique ni useDictation).
+- Lot 3 GONAXIS : page Assistant dédiée.
+- Relances email automatiques, import catalogue réel, carnet clients.

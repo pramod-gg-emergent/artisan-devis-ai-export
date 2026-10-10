@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only testing of Lot 1 dark theme Home transformation. All critical UI elements and interactions verified against the review spec. Home page renders dark with new header 'SOCLE Artisan par GONAXIS', notification bell (red dot shown as stats.a_relancer=2>0) nav to /devis, avatar initials 'MD' (from artisan_name 'Martin Dubois') nav to /parametres. Greeting shows 'Bonjour Martin !'; changed artisan_name to 'Alice Martin' via /parametres data-testid=company-artisan + Enregistrer and greeting + avatar updated to 'Bonjour Alice !' / 'AM', then restored to 'Martin Dubois'. home-ask-input + home-ask-submit navigates to /nouveau and after advancing to step 2 the description-textarea is pre-filled with the typed text ('Rénovation salle de bain 6m2'). Chips: chip-create-quote->/nouveau, chip-relance->/devis, chip-plan shows 'bientôt disponible' toast. Connected tools: tool-admin->/devis, tool-gmail toast; tool-agenda/social/avis/prospection render with SoonBadge. Today section: today-urgent-count = 2 == /api/dashboard/stats a_relancer; today-urgent->/devis; today-rdv and today-chantier show toast. Quick actions: quick-create->/nouveau, quick-relance->/devis, quick-agenda & quick-achat toast. KPIs: kpi-sent=3 (total_devis 4 - a_preparer 1), kpi-accepted='1 368,00 €', kpi-relance=2, kpi-time='1h40'. Desktop (1920): top nav items nav-dash/nav-quotes/nav-assistant/nav-settings visible + floating nav-new-desktop visible; mobile-bottom-nav hidden. Mobile (390): mobile-bottom-nav shows nav-dash-mobile, nav-quotes-mobile, nav-new-mobile(+), nav-assistant-mobile, nav-settings-mobile all visible; desktop FAB hidden; nav-new-mobile->/nouveau works. home-mic-button present and does not crash. No console errors on home or during navigation. Public page tokens exist on quotes (public_token key present) and layout code excludes header for /devis-client/* so light theme regression preserved.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Dashboard.jsx fetches 'quotes' only to compute toRelance for TodayCards; stats.a_relancer already matches so this duplicate client-side filter is OK but note it depends on effective_statut being computed server-side (confirmed via /api/quotes response). No change needed.",
+    "Layout.jsx: Brand always renders dark text 'SOCLE Artisan par GONAXIS' including on light pages (/devis, /nouveau, /parametres). The sticky header is bg-night/85 on all pages per spec ('header dark'), confirmed working. The ring-2 ring-night on the bell dot blends nicely with the dark header. Good.",
+    "HomeUI.jsx initials() fallback 'SA' is correct and keeps avatar non-empty when artisan_name is blank.",
+    "AssistantHero.jsx: form submit uses text.trim() guard; if empty, button is clickable but no-ops. Minor UX: consider disabling home-ask-submit when input is empty for clarity (non-blocking).",
+    "ConnectedTools 'social' key maps to data-testid=tool-social (verified in TOOLS array); matches review spec.",
+    "TodayCards: today-urgent remains clickable even when n=0 and navigates to /devis — acceptable per spec ('click -> /devis').",
+    "No a11y label on nav-bell-btn and nav-avatar-btn beyond title attribute; consider aria-label for screen readers."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "No auth required.",
+  "seed_data_creation": "None. Temporarily changed artisan_name 'Martin Dubois' -> 'Alice Martin' and restored to 'Martin Dubois' after greeting/avatar propagation verified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Lot 1 dark home + layout fully passing. All data-testids present and used: logo-home-btn, nav-bell-btn, nav-bell-dot, nav-avatar-btn, home-greeting, home-ask-input, home-ask-submit, home-mic-button, chip-create-quote, chip-relance, chip-plan, tool-{gmail,agenda,social,admin,avis,prospection}, today-urgent, today-urgent-count, today-rdv, today-chantier, quick-{create,relance,agenda,achat}, kpi-{sent,accepted,relance,time}, nav-{dash,quotes,assistant,settings}, nav-{dash,quotes,new,assistant,settings}-mobile, nav-new-desktop, mobile-bottom-nav. Public /devis-client/:token layout branches via useLocation and does not render the dark header (per code review); worth a dedicated visual check in next iteration when more public-page work lands.",
+  "rca of the issue": "N/A — feature validation task, no bugs found."
+}
