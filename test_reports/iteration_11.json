@@ -1,0 +1,28 @@
+{
+  "summary": "LOT 2 dark theme validation on internal pages (Dashboard /, QuotesList /devis, NewQuote /nouveau, QuoteDetail /devis/:id, Settings /parametres) and verification that public page /devis-client/:token stays LIGHT. Verified html.theme-night is applied on all internal routes (bodyBg=rgb(5,11,26)=#050B1A) and NOT applied on /devis-client/* (bodyBg=rgb(244,247,248)=#F4F7F8, light text visible). Internal pages render with navy cards, light headings/labels/muted text, electric-blue accents, and all status badges (Brouillon slate, Envoyé, À relancer amber #FBBF24, Relancé, Accepté emerald #34D399, Refusé) are legible on dark background via .theme-night overrides in index.css. Navigation (top header + mobile bottom nav + desktop FAB) identical to Home across all pages: data-testids present on every page: top-nav, logo-home-btn, nav-dash/-quotes/-assistant/-settings (desktop), nav-bell-btn + nav-bell-dot (alerts=2), nav-avatar-btn (MD), nav-new-desktop, mobile-bottom-nav containing nav-dash-mobile/nav-quotes-mobile/nav-new-mobile/nav-assistant-mobile/nav-settings-mobile. QuotesList filters (filter-all=4 rows, filter-brouillon=1, filter-envoye, filter-a_relancer, filter-accepte=1) all work. NewQuote Step1 (client-nom-input, client-tel-input, client-email-input, client-adresse-input, prefill-client-btn, voice-primary-button, step1-next-btn) all render dark+readable; prefill fills 'Mme Dubois'; moves to Step2 (description-textarea, example-btn, voice-primary-button, step2-back-btn, analyze-button) correctly. QuoteDetail renders status-badge, preview totals, download-pdf-button, edit-quote-button, send-quote-button, accept-quote-button. Send dialog opens on top of dark backdrop; dialog itself bg=rgb(5,11,26) color=rgb(235,240,250) — fully readable, form fields visible, 'Envoyer au client' button electric blue. Settings page: company-form fields readable, TVA <select> readable (10 %), catalog-editor shows items with mini TVA select. Save flow present; artisan_name left as 'Martin Dubois' (NOT modified). Public page tested with invalid token also stayed LIGHT (introuvable message visible on #F4F7F8). Mobile 390px: bottom nav visible, desktop FAB hidden, rows readable, filter chips scroll. Desktop 1920px: top nav + FAB visible, mobile bottom nav hidden. No console errors other than a non-blocking React hydration warning on Settings <select> caused by Emergent's injected x-* span inside <option> (dev-tool instrumentation, not product code).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "INFO (not a bug for Lot 2): GET /api/quotes and GET /api/quotes/:id return public_token=null for all 4 demo quotes. Token is only generated when quote is sent via email. Did not click 'Envoyer' on demo quotes (per spec). If a demo seed public_token is desired for future QA, backend seed could pre-populate it."
+  ],
+  "critical_code_review_comments": [
+    "index.css .theme-night overrides use attribute-contains selectors like [class*=\"text-petrol\"] which is broad but acceptable for an identity-only override; be aware this will also match utility prefixes like text-petrol-foo if ever introduced.",
+    "Layout.jsx unconditionally adds theme-night to <html> in useEffect. Public page avoids this because it is rendered outside <Layout> in App.js (separate <Route>), confirmed by DOM inspection (hasThemeNight=false on /devis-client/invalidtoken123).",
+    "Settings.jsx has <option> elements that trigger a React hydration warning due to Emergent's x-* span injection inside <option>. Non-blocking for users; only visible in devtools. No action required unless the injection framework is updated.",
+    "NewQuote step2/step3 flow is unchanged and dark-themed; AI analysis button present (analyze-button). Not executed to avoid LLM cost; functional surface verified.",
+    "PublicQuote.jsx uses light tokens (text-petrol, bg-lagoon etc.). Because html.theme-night is not set, the global :root light tokens apply correctly — public page stays LIGHT as required."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "No auth required.",
+  "seed_data_creation": "None. No quotes created, modified, or deleted. Settings artisan_name untouched (still 'Martin Dubois').",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Lot 2 dark theme fully validated on all internal pages at 390/1920 viewports. Public /devis-client/:token confirmed LIGHT via theme-night absence (invalid-token path shown). public_token is null on all demo quotes from /api/quotes; main agent should pre-seed one if public-page visual QA requires a valid rendered quote. All data-testids expected by the spec are present: filter-all/-brouillon/-envoye/-a_relancer/-accepte, prefill-client-btn, step1-next-btn, example-btn, analyze-button, step2-back-btn, download-pdf-button, edit-quote-button, send-quote-button, accept-quote-button, company-form fields, catalog-editor, catalog-item-*, catalog-desig-*, catalog-del-*, add-catalog-item-btn, save-catalog-btn.",
+  "rca of the issue": "N/A — Lot 2 identity-only theming task, no bugs found."
+}
