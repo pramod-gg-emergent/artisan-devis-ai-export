@@ -1,117 +1,85 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, FileText, Plus, Sparkles, Settings } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Home, BarChart3, Plus, Sparkles, User, Bell } from "lucide-react";
+import api from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
+import { initials } from "@/components/home/HomeUI";
 
-const ARTISAN = "Martin Rénovation";
+const Brand = ({ onClick }) => (
+  <button data-testid="logo-home-btn" onClick={onClick} className="text-left leading-none">
+    <div className="font-heading text-xl font-extrabold tracking-tight text-white">
+      SOCLE <span className="text-electric-glow">Artisan</span>
+    </div>
+    <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">par GONAXIS</div>
+  </button>
+);
+
+const NavItem = ({ t, onClick, mobile }) => (
+  <button data-testid={`nav-${t.key}${mobile ? "-mobile" : ""}`} onClick={onClick}
+    className={cn(mobile
+      ? "flex flex-col items-center gap-0.5 py-1 text-[11px] font-semibold transition-colors"
+      : "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors",
+      t.active ? "text-electric-glow" : "text-slate-400 hover:text-white",
+      !mobile && t.active && "bg-electric/10")}>
+    <t.icon size={mobile ? 22 : 17} /> {t.label}
+  </button>
+);
 
 export const Layout = ({ children }) => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const path = location.pathname;
+  const { pathname: path } = useLocation();
+  const isHome = path === "/";
+  const { data: company } = useQuery({ queryKey: ["company"], queryFn: api.company });
+  const { data: stats } = useQuery({ queryKey: ["stats"], queryFn: api.stats });
+  const alerts = stats?.a_relancer || 0;
 
   const tabs = [
-    { key: "dash", label: "Accueil", icon: LayoutDashboard, to: "/", active: path === "/" },
-    { key: "quotes", label: "Devis", icon: FileText, to: "/devis", active: path.startsWith("/devis") },
-    { key: "settings", label: "Paramètres", icon: Settings, to: "/parametres", active: path.startsWith("/parametres") },
+    { key: "dash", label: "Accueil", icon: Home, to: "/", active: isHome },
+    { key: "quotes", label: "Mon activité", icon: BarChart3, to: "/devis", active: path.startsWith("/devis") },
+    { key: "assistant", label: "Assistant", icon: Sparkles, to: "/nouveau", active: path.startsWith("/nouveau") },
+    { key: "settings", label: "Profil", icon: User, to: "/parametres", active: path.startsWith("/parametres") },
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-24 sm:pb-8">
-      {/* Top bar */}
-      <header
-        data-testid="top-nav"
-        className="sticky top-0 z-30 border-b border-petrol/10 bg-petrol text-white"
-      >
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
-          <button
-            data-testid="logo-home-btn"
-            onClick={() => navigate("/")}
-            className="flex items-center gap-2.5 text-left"
-          >
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-lagoon text-white shadow-cta">
-              <Sparkles size={18} strokeWidth={2.5} />
-            </div>
-            <div className="leading-tight">
-              <div className="font-heading text-base font-extrabold tracking-tight">SOCLE Artisan</div>
-              <div className="text-[11px] font-medium text-cyan-200">Assistant Devis IA</div>
-            </div>
-          </button>
+    <div className={cn("min-h-screen pb-28 sm:pb-10", isHome ? "bg-night-app" : "bg-background")}>
+      <header data-testid="top-nav" className="sticky top-0 z-30 border-b border-white/5 bg-night/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <Brand onClick={() => navigate("/")} />
+          <nav className="hidden items-center gap-1 sm:flex">
+            {tabs.map((t) => <NavItem key={t.key} t={t} onClick={() => navigate(t.to)} />)}
+          </nav>
           <div className="flex items-center gap-2">
-            <button
-              data-testid="nav-settings-btn"
-              onClick={() => navigate("/parametres")}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-              title="Paramètres"
-            >
-              <Settings size={18} />
+            <button data-testid="nav-bell-btn" onClick={() => navigate("/devis")} title="Notifications"
+              className="relative flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/10">
+              <Bell size={21} />
+              {alerts > 0 && <span data-testid="nav-bell-dot" className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-night" />}
             </button>
-            <div className="flex items-center gap-2 rounded-full bg-white/10 py-1.5 pl-1.5 pr-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-lagoon text-xs font-bold">MR</div>
-              <span className="hidden text-sm font-semibold sm:block">{ARTISAN}</span>
-            </div>
+            <button data-testid="nav-avatar-btn" onClick={() => navigate("/parametres")} title="Profil"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-electric/40 bg-night-soft text-sm font-bold text-white transition-colors hover:border-electric-glow">
+              {initials(company?.artisan_name || company?.name)}
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Desktop nav */}
-      <div className="mx-auto hidden max-w-5xl items-center gap-1 px-6 pt-4 sm:flex">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            data-testid={`nav-${t.key}`}
-            onClick={() => navigate(t.to)}
-            className={cn(
-              "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors",
-              t.active ? "bg-white text-petrol shadow-card" : "text-petrol/60 hover:bg-white/60"
-            )}
-          >
-            <t.icon size={17} /> {t.label}
-          </button>
-        ))}
-        <button
-          data-testid="nav-new-desktop"
-          onClick={() => navigate("/nouveau")}
-          className="ml-auto flex items-center gap-2 rounded-xl bg-lagoon px-4 py-2 text-sm font-bold text-white shadow-cta transition-transform hover:scale-[1.02] active:scale-95"
-        >
-          <Plus size={18} strokeWidth={2.5} /> Nouveau devis IA
-        </button>
-      </div>
-
       <main className="mx-auto max-w-5xl px-4 py-5 sm:px-6">{children}</main>
 
-      {/* Mobile bottom bar */}
-      <nav
-        data-testid="mobile-bottom-nav"
-        className="fixed bottom-0 left-0 right-0 z-30 border-t border-petrol/10 bg-white/95 backdrop-blur sm:hidden"
-      >
-        <div className="mx-auto grid max-w-md grid-cols-3 items-center px-2 py-2">
-          <button
-            data-testid="nav-dash-mobile"
-            onClick={() => navigate("/")}
-            className={cn("flex flex-col items-center gap-0.5 py-1 text-[11px] font-semibold",
-              path === "/" ? "text-lagoon" : "text-slate-400")}
-          >
-            <LayoutDashboard size={22} /> Accueil
-          </button>
+      <button data-testid="nav-new-desktop" onClick={() => navigate("/nouveau")} title="Nouveau devis IA"
+        className="fixed bottom-6 right-6 z-30 hidden h-14 w-14 items-center justify-center rounded-full bg-electric text-white shadow-neon transition-transform hover:scale-105 active:scale-95 sm:flex">
+        <Plus size={28} strokeWidth={2.5} />
+      </button>
+
+      <nav data-testid="mobile-bottom-nav" className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/5 bg-night/95 backdrop-blur-xl sm:hidden">
+        <div className="mx-auto grid max-w-md grid-cols-5 items-center px-2 pb-2 pt-1.5">
+          {tabs.slice(0, 2).map((t) => <NavItem mobile key={t.key} t={t} onClick={() => navigate(t.to)} />)}
           <div className="flex justify-center">
-            <button
-              data-testid="nav-new-mobile"
-              onClick={() => navigate("/nouveau")}
-              className="-mt-8 flex h-16 w-16 flex-col items-center justify-center rounded-2xl bg-lagoon text-white shadow-cta transition-transform active:scale-90"
-            >
-              <Plus size={26} strokeWidth={2.5} />
-              <span className="text-[10px] font-bold">Devis IA</span>
+            <button data-testid="nav-new-mobile" onClick={() => navigate("/nouveau")} aria-label="Nouveau devis IA"
+              className="-mt-8 flex h-16 w-16 items-center justify-center rounded-full bg-electric text-white shadow-neon ring-4 ring-night transition-transform active:scale-90">
+              <Plus size={30} strokeWidth={2.5} />
             </button>
           </div>
-          <button
-            data-testid="nav-quotes-mobile"
-            onClick={() => navigate("/devis")}
-            className={cn("flex flex-col items-center gap-0.5 py-1 text-[11px] font-semibold",
-              path.startsWith("/devis") ? "text-lagoon" : "text-slate-400")}
-          >
-            <FileText size={22} /> Devis
-          </button>
+          {tabs.slice(2).map((t) => <NavItem mobile key={t.key} t={t} onClick={() => navigate(t.to)} />)}
         </div>
       </nav>
     </div>

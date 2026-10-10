@@ -63,11 +63,15 @@ module.exports = {
         amber: { relance: '#D97706', bg: '#FEF3C7' },
         emerald: { accepted: '#059669', bg: '#D1FAE5' },
         slatey: { draft: '#64748B', bg: '#F1F5F9' },
+        night: { DEFAULT: '#050B1A', panel: '#0A1530', soft: '#101E3D', line: '#1E3A6B' },
+        electric: { DEFAULT: '#2F80FF', glow: '#4FA3FF', cyan: '#38BDF8' },
       },
       boxShadow: {
         card: '0 2px 8px -2px rgba(15, 45, 58, 0.08), 0 1px 3px 0 rgba(15, 45, 58, 0.04)',
         cta: '0 10px 25px -5px rgba(0, 168, 150, 0.4), 0 8px 10px -6px rgba(0, 168, 150, 0.2)',
         active: '0 8px 20px -4px rgba(15, 45, 58, 0.12)',
+        glow: '0 0 0 1px rgba(79, 163, 255, 0.25), 0 10px 30px -10px rgba(47, 128, 255, 0.45)',
+        neon: '0 0 30px rgba(56, 189, 248, 0.55), 0 0 70px rgba(47, 128, 255, 0.35)',
       },
       keyframes: {
         'accordion-down': { from: { height: '0' }, to: { height: 'var(--radix-accordion-content-height)' } },

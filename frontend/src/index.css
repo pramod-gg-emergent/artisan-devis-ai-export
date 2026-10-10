@@ -73,6 +73,34 @@ h1, h2, h3, h4, .font-heading {
 }
 .wave-bar { animation: wave 0.9s ease-in-out infinite; transform-origin: center; }
 
+.bg-night-app {
+    background-color: #050B1A;
+    background-image:
+        radial-gradient(circle at 85% -10%, rgba(47, 128, 255, 0.22), transparent 45%),
+        radial-gradient(circle at 0% 40%, rgba(56, 189, 248, 0.08), transparent 40%);
+}
+.glass-panel {
+    background: rgba(10, 21, 48, 0.72);
+    border: 1px solid rgba(79, 163, 255, 0.18);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+.mic-ring { animation: ring-spin 8s linear infinite; }
+@keyframes neon-pulse {
+    0%, 100% { box-shadow: 0 0 24px rgba(56, 189, 248, 0.45), 0 0 60px rgba(47, 128, 255, 0.25); }
+    50% { box-shadow: 0 0 36px rgba(56, 189, 248, 0.75), 0 0 90px rgba(47, 128, 255, 0.45); }
+}
+.mic-neon { animation: neon-pulse 2.4s ease-in-out infinite; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+.stagger > * { animation: float-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }
+
 @keyframes shimmer {
     0% { background-position: -400px 0; }
     100% { background-position: 400px 0; }

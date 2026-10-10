@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -44,7 +44,8 @@ export default function NewQuote() {
 
   const [step, setStep] = useState(1);
   const [client, setClient] = useState({ nom: "", telephone: "", email: "", adresse: "" });
-  const [description, setDescription] = useState("");
+  const location = useLocation();
+  const [description, setDescription] = useState(location.state?.description || "");
   const [lignes, setLignes] = useState([]);
   const [aiNote, setAiNote] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
